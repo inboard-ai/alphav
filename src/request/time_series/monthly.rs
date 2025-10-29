@@ -20,10 +20,7 @@ pub struct TimeSeriesMonthly<'a, Client: Request, P: Processor = Raw> {
 // Constructor - always starts with Raw
 impl<'a, C: Request> TimeSeriesMonthly<'a, C, Raw> {
     /// Create new time series monthly request (returns raw JSON by default)
-    pub fn new(
-        client: &'a AlphaVantage<C>,
-        symbol: impl Into<String>,
-    ) -> Self {
+    pub fn new(client: &'a AlphaVantage<C>, symbol: impl Into<String>) -> Self {
         Self {
             client,
             symbol: symbol.into(),
@@ -65,7 +62,7 @@ impl<'a, C: Request, P: Processor + 'a> Execute for TimeSeriesMonthly<'a, C, P> 
         ];
 
         if let Some(datatype) = self.datatype {
-            params.push(format!("datatype={}", datatype));
+            params.push(format!("datatype={datatype}"));
         }
 
         let url = format!("https://www.alphavantage.co/query?{}", params.join("&"));

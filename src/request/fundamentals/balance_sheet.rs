@@ -18,10 +18,7 @@ pub struct BalanceSheet<'a, Client: Request, P: Processor = Raw> {
 // Constructor - always starts with Raw
 impl<'a, C: Request> BalanceSheet<'a, C, Raw> {
     /// Create new balance sheet request (returns raw JSON by default)
-    pub fn new(
-        client: &'a AlphaVantage<C>,
-        symbol: impl Into<String>,
-    ) -> Self {
+    pub fn new(client: &'a AlphaVantage<C>, symbol: impl Into<String>) -> Self {
         Self {
             client,
             symbol: symbol.into(),
@@ -36,6 +33,16 @@ impl<'a, C: Request, P: Processor + 'a> BalanceSheet<'a, C, P> {
     pub fn get(self) -> impl std::future::Future<Output = Result<P::Output>> + 'a {
         Execute::get(self)
     }
+
+    /// Convert to DataFrame output (Polars DataFrame)
+    #[cfg(feature = "table")]
+    pub fn as_dataframe(self) -> BalanceSheet<'a, C, crate::processor::Table> {
+        BalanceSheet {
+            client: self.client,
+            symbol: self.symbol,
+            processor: crate::processor::Table,
+        }
+    }
 }
 
 impl<'a, C: Request, P: Processor + 'a> Execute for BalanceSheet<'a, C, P> {
@@ -49,11 +56,9 @@ impl<'a, C: Request, P: Processor + 'a> Execute for BalanceSheet<'a, C, P> {
             .api_key()
             .ok_or_else(|| crate::error::Error::Custom("API key not set".to_string()))?;
 
-        let params = vec![
-            format!("function=BALANCE_SHEET"),
+        let params = ["function=BALANCE_SHEET".to_string(),
             format!("symbol={}", self.symbol),
-            format!("apikey={}", api_key),
-        ];
+            format!("apikey={api_key}")];
 
         let url = format!("https://www.alphavantage.co/query?{}", params.join("&"));
 

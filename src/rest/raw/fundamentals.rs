@@ -4,7 +4,7 @@ use crate::client::AlphaVantage;
 use crate::processor::Raw;
 use crate::request::Request;
 use crate::request::fundamentals::{
-    CompanyOverview, Earnings, EarningsEstimates, IncomeStatement, BalanceSheet, CashFlow
+    BalanceSheet, CashFlow, CompanyOverview, Earnings, EarningsEstimates, IncomeStatement,
 };
 
 /// Get earnings estimates for a stock
@@ -83,9 +83,7 @@ mod tests {
     #[ignore]
     async fn test_earnings_estimates() {
         let client = setup();
-        let result = earnings_estimates(&client, "AAPL")
-            .get()
-            .await;
+        let result = earnings_estimates(&client, "AAPL").get().await;
         assert!(result.is_ok(), "Failed to fetch earnings estimates: {result:?}");
     }
 

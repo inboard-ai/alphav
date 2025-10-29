@@ -18,10 +18,7 @@ pub struct IncomeStatement<'a, Client: Request, P: Processor = Raw> {
 // Constructor - always starts with Raw
 impl<'a, C: Request> IncomeStatement<'a, C, Raw> {
     /// Create new income statement request (returns raw JSON by default)
-    pub fn new(
-        client: &'a AlphaVantage<C>,
-        symbol: impl Into<String>,
-    ) -> Self {
+    pub fn new(client: &'a AlphaVantage<C>, symbol: impl Into<String>) -> Self {
         Self {
             client,
             symbol: symbol.into(),
@@ -36,6 +33,16 @@ impl<'a, C: Request, P: Processor + 'a> IncomeStatement<'a, C, P> {
     pub fn get(self) -> impl std::future::Future<Output = Result<P::Output>> + 'a {
         Execute::get(self)
     }
+
+    /// Convert to DataFrame output (Polars DataFrame)
+    #[cfg(feature = "table")]
+    pub fn as_dataframe(self) -> IncomeStatement<'a, C, crate::processor::Table> {
+        IncomeStatement {
+            client: self.client,
+            symbol: self.symbol,
+            processor: crate::processor::Table,
+        }
+    }
 }
 
 impl<'a, C: Request, P: Processor + 'a> Execute for IncomeStatement<'a, C, P> {
@@ -49,11 +56,9 @@ impl<'a, C: Request, P: Processor + 'a> Execute for IncomeStatement<'a, C, P> {
             .api_key()
             .ok_or_else(|| crate::error::Error::Custom("API key not set".to_string()))?;
 
-        let params = vec![
-            format!("function=INCOME_STATEMENT"),
+        let params = ["function=INCOME_STATEMENT".to_string(),
             format!("symbol={}", self.symbol),
-            format!("apikey={}", api_key),
-        ];
+            format!("apikey={api_key}")];
 
         let url = format!("https://www.alphavantage.co/query?{}", params.join("&"));
 

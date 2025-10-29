@@ -19,9 +19,7 @@ fn setup() -> Result<AlphaVantage> {
     std::env::var("ALPHAVANTAGE_API_KEY")
         .map(|key| AlphaVantage::default().with_key(key))
         .map_err(|_| {
-            alphav::Error::Custom(
-                "ALPHAVANTAGE_API_KEY not found. Set it in .env or environment.".to_string(),
-            )
+            alphav::Error::Custom("ALPHAVANTAGE_API_KEY not found. Set it in .env or environment.".to_string())
         })
 }
 
@@ -35,11 +33,7 @@ async fn test_time_series_intraday() {
         .get()
         .await;
 
-    assert!(
-        result.is_ok(),
-        "Failed to fetch intraday data: {:?}",
-        result.err()
-    );
+    assert!(result.is_ok(), "Failed to fetch intraday data: {:?}", result.err());
 
     let json = result.unwrap();
     assert!(!json.is_empty(), "Response should not be empty");
@@ -61,11 +55,7 @@ async fn test_time_series_daily() {
         .get()
         .await;
 
-    assert!(
-        result.is_ok(),
-        "Failed to fetch daily data: {:?}",
-        result.err()
-    );
+    assert!(result.is_ok(), "Failed to fetch daily data: {:?}", result.err());
 
     let json = result.unwrap();
     assert!(!json.is_empty(), "Response should not be empty");
@@ -81,11 +71,7 @@ async fn test_earnings_estimates() {
         .get()
         .await;
 
-    assert!(
-        result.is_ok(),
-        "Failed to fetch earnings estimates: {:?}",
-        result.err()
-    );
+    assert!(result.is_ok(), "Failed to fetch earnings estimates: {:?}", result.err());
 
     let json = result.unwrap();
     assert!(!json.is_empty(), "Response should not be empty");
@@ -103,15 +89,9 @@ async fn test_earnings_estimates() {
 async fn test_company_overview() {
     let client = setup().expect("Failed to initialize client");
 
-    let result = rest::fundamentals::company_overview(&client, "IBM")
-        .get()
-        .await;
+    let result = rest::fundamentals::company_overview(&client, "IBM").get().await;
 
-    assert!(
-        result.is_ok(),
-        "Failed to fetch company overview: {:?}",
-        result.err()
-    );
+    assert!(result.is_ok(), "Failed to fetch company overview: {:?}", result.err());
 
     let json = result.unwrap();
     assert!(!json.is_empty(), "Response should not be empty");
@@ -128,11 +108,7 @@ async fn test_earnings() {
 
     let result = rest::fundamentals::earnings(&client, "IBM").get().await;
 
-    assert!(
-        result.is_ok(),
-        "Failed to fetch earnings: {:?}",
-        result.err()
-    );
+    assert!(result.is_ok(), "Failed to fetch earnings: {:?}", result.err());
 
     let json = result.unwrap();
     assert!(!json.is_empty(), "Response should not be empty");

@@ -73,7 +73,7 @@ impl<'a, C: Request, P: Processor + 'a> Execute for EarningsEstimates<'a, C, P> 
         ];
 
         if let Some(horizon) = self.horizon {
-            params.push(format!("horizon={}", horizon));
+            params.push(format!("horizon={horizon}"));
         }
 
         let url = format!("https://www.alphavantage.co/query?{}", params.join("&"));

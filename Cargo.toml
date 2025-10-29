@@ -39,6 +39,7 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 decoder = { version = "0.0.3" }
 dotenvy = { version = "0.15" }
 serde_json = "1.0"
+chrono = "0.4"
 
 [features]
 default = ["hyper", "decoder", "dep:arc-swap"]

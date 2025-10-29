@@ -23,18 +23,39 @@ impl Processor for Table {
         }
 
         let json_value: serde_json::Value = serde_json::from_str(resp.body())?;
-        
-        // Try to extract common array fields (estimates, results, etc.)
+
+        // Try to extract common array fields (estimates, results, annualReports, etc.)
         let data = json_value
             .get("estimates")
             .or_else(|| json_value.get("results"))
+            .or_else(|| json_value.get("annualReports"))
+            .or_else(|| json_value.get("quarterlyReports"))
             .or_else(|| json_value.get("data"))
             .unwrap_or(&json_value);
-        
+
+        // Ensure we have an array
+        if !data.is_array() {
+            return Err(crate::error::Error::Custom(format!(
+                "Expected array data for DataFrame conversion, got: {}",
+                if data.is_object() {
+                    "object"
+                } else if data.is_null() {
+                    "null"
+                } else {
+                    "other"
+                }
+            )));
+        }
+
+        // Allow empty arrays - we must preserve original API responses per Alpha Vantage guidelines
         let json_bytes = serde_json::to_vec(data)?;
-        let df = JsonReader::new(Cursor::new(json_bytes))
-            .finish()
-            .map_err(|e| crate::error::Error::Custom(format!("Failed to parse JSON as DataFrame: {e}")))?;
+        let json_preview = String::from_utf8_lossy(&json_bytes[..json_bytes.len().min(200)]).to_string();
+        let df = JsonReader::new(Cursor::new(json_bytes)).finish().map_err(|e| {
+            crate::error::Error::Custom(format!(
+                "Failed to parse JSON as DataFrame: {}. Data preview: {}",
+                e, json_preview
+            ))
+        })?;
         Ok(df)
     }
 }

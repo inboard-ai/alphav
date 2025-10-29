@@ -3,8 +3,8 @@
 use crate::client::AlphaVantage;
 use crate::processor::Raw;
 use crate::request::Request;
-use crate::request::time_series::{TimeSeriesIntraday, TimeSeriesDaily, TimeSeriesWeekly, TimeSeriesMonthly};
 use crate::request::common::Interval;
+use crate::request::time_series::{TimeSeriesDaily, TimeSeriesIntraday, TimeSeriesMonthly, TimeSeriesWeekly};
 
 /// Get intraday time series for a stock
 ///
@@ -73,9 +73,7 @@ mod tests {
     #[ignore] // Run with: cargo test -- --ignored --test-threads=1
     async fn test_intraday() {
         let client = setup();
-        let result = intraday(&client, "AAPL", Interval::FiveMin)
-            .get()
-            .await;
+        let result = intraday(&client, "AAPL", Interval::FiveMin).get().await;
         assert!(result.is_ok(), "Failed to fetch intraday data: {result:?}");
     }
 

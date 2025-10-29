@@ -10,9 +10,7 @@ pub struct Decoder<T> {
 
 impl<T> Decoder<T> {
     /// Create a new decoder with the given decoder function
-    pub fn new(
-        decoder_fn: impl Fn(decoder::Value) -> decoder::Result<T> + Send + Sync + 'static,
-    ) -> Self {
+    pub fn new(decoder_fn: impl Fn(decoder::Value) -> decoder::Result<T> + Send + Sync + 'static) -> Self {
         Self {
             decoder_fn: Box::new(decoder_fn),
         }

@@ -18,10 +18,7 @@ pub struct CashFlow<'a, Client: Request, P: Processor = Raw> {
 // Constructor - always starts with Raw
 impl<'a, C: Request> CashFlow<'a, C, Raw> {
     /// Create new cash flow request (returns raw JSON by default)
-    pub fn new(
-        client: &'a AlphaVantage<C>,
-        symbol: impl Into<String>,
-    ) -> Self {
+    pub fn new(client: &'a AlphaVantage<C>, symbol: impl Into<String>) -> Self {
         Self {
             client,
             symbol: symbol.into(),
@@ -49,11 +46,9 @@ impl<'a, C: Request, P: Processor + 'a> Execute for CashFlow<'a, C, P> {
             .api_key()
             .ok_or_else(|| crate::error::Error::Custom("API key not set".to_string()))?;
 
-        let params = vec![
-            format!("function=CASH_FLOW"),
+        let params = ["function=CASH_FLOW".to_string(),
             format!("symbol={}", self.symbol),
-            format!("apikey={}", api_key),
-        ];
+            format!("apikey={api_key}")];
 
         let url = format!("https://www.alphavantage.co/query?{}", params.join("&"));
 
