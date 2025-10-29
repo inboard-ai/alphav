@@ -2,5 +2,60 @@
 name = "alphav"
 version = "0.1.0"
 edition = "2024"
+description = "Rust client library for Alpha Vantage API"
+license = "MIT"
+repository = "https://github.com/inboard-ai/alphav"
 
 [dependencies]
+reqwest = { version = "0.12", optional = true, features = ["json"] }
+hyper = { version = "1.5", optional = true, features = [
+    "client",
+    "http1",
+    "http2",
+] }
+hyper-util = { version = "0.1", optional = true, features = [
+    "client",
+    "client-legacy",
+    "http1",
+    "http2",
+    "tokio",
+] }
+hyper-tls = { version = "0.6", optional = true }
+http-body-util = { version = "0.1", optional = true }
+dotenvy = { version = "0.15", optional = true }
+decoder = { version = "0.0.3", optional = true }
+serde = { version = "1.0", optional = true, features = ["derive"] }
+serde_json = { version = "1.0", optional = true }
+serde_urlencoded = { version = "0.7", optional = true }
+polars-core = { version = "0.51", optional = true, default-features = false, features = ["fmt"] }
+polars-io = { version = "0.51", optional = true, default-features = false, features = [
+    "json",
+] }
+schemars = { version = "0.8", optional = true, features = ["derive"] }
+arc-swap = { version = "1.7.1", optional = true }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+decoder = { version = "0.0.3" }
+dotenvy = { version = "0.15" }
+serde_json = "1.0"
+
+[features]
+default = ["hyper", "decoder", "dep:arc-swap"]
+reqwest = ["dep:reqwest"]
+hyper = ["dep:hyper", "dep:hyper-util", "dep:hyper-tls", "dep:http-body-util"]
+dotenvy = ["dep:dotenvy"]
+decoder = [
+    "dep:decoder",
+    "dep:serde",
+    "dep:serde_json",
+    "dep:schemars",
+    "dep:serde_urlencoded",
+]
+table = [
+    "dep:polars-core",
+    "dep:polars-io",
+    "dep:serde",
+    "dep:serde_json",
+    "dep:schemars",
+]

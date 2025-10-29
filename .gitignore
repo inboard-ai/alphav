@@ -1,7 +1,9 @@
-/target
+**/target
 .env
 .*.md
+.*.txt
 
 Cargo.lock
 
 /reference
+/polygon
