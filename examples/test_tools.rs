@@ -1,6 +1,6 @@
 //! Test the tool_use module
 use alphav::AlphaVantage;
-use alphav::tool_use::{list_tools, call_tool};
+use alphav::tool_use::{list_tools, call_tool, ToolCallResult};
 use serde_json::json;
 
 #[tokio::main]
@@ -26,7 +26,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         });
         
         match call_tool(&client, request).await {
-            Ok(response) => println!("Success! Response: {}", serde_json::to_string_pretty(&response)?),
+            Ok(ToolCallResult::DataFrame { data, schema }) => {
+                println!("Success! Response: {}", serde_json::to_string_pretty(&data)?);
+                println!("Schema columns: {}", schema.len());
+            }
+            Ok(ToolCallResult::Text(text)) => {
+                println!("Success! Response: {}", text);
+            }
             Err(e) => println!("Error calling tool: {}", e),
         }
     } else {

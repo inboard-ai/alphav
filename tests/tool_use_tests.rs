@@ -4,7 +4,7 @@
 //! They require a valid ALPHAVANTAGE_API_KEY to be set in the environment.
 
 use alphav::AlphaVantage;
-use alphav::tool_use::{list_tools, call_tool, get_tool_details};
+use alphav::tool_use::{list_tools, call_tool, get_tool_details, ToolCallResult};
 use serde_json::json;
 
 /// Helper to setup client
@@ -69,7 +69,9 @@ async fn test_time_series_intraday() {
     let result = call_tool(&client, request).await;
     assert!(result.is_ok(), "Failed to call time_series_intraday: {:?}", result.err());
     
-    let response = result.unwrap();
+    let ToolCallResult::DataFrame { data: response, .. } = result.unwrap() else {
+        panic!("Expected DataFrame result");
+    };
     
     // Verify metadata structure
     let metadata = response.get("Meta Data")
@@ -121,7 +123,9 @@ async fn test_time_series_daily() {
     let result = call_tool(&client, request).await;
     assert!(result.is_ok(), "Failed to call time_series_daily: {:?}", result.err());
     
-    let response = result.unwrap();
+    let ToolCallResult::DataFrame { data: response, .. } = result.unwrap() else {
+        panic!("Expected DataFrame result");
+    };
     
     // Verify metadata
     let metadata = response.get("Meta Data")
@@ -185,7 +189,9 @@ async fn test_time_series_weekly() {
     let result = call_tool(&client, request).await;
     assert!(result.is_ok(), "Failed to call time_series_weekly: {:?}", result.err());
     
-    let response = result.unwrap();
+    let ToolCallResult::DataFrame { data: response, .. } = result.unwrap() else {
+        panic!("Expected DataFrame result");
+    };
     assert!(response.get("Meta Data").is_some());
     assert!(response.get("Weekly Time Series").is_some());
 }
@@ -204,7 +210,9 @@ async fn test_time_series_monthly() {
     let result = call_tool(&client, request).await;
     assert!(result.is_ok(), "Failed to call time_series_monthly: {:?}", result.err());
     
-    let response = result.unwrap();
+    let ToolCallResult::DataFrame { data: response, .. } = result.unwrap() else {
+        panic!("Expected DataFrame result");
+    };
     assert!(response.get("Meta Data").is_some());
     assert!(response.get("Monthly Time Series").is_some());
 }
@@ -223,7 +231,9 @@ async fn test_company_overview() {
     let result = call_tool(&client, request).await;
     assert!(result.is_ok(), "Failed to call company_overview: {:?}", result.err());
     
-    let response = result.unwrap();
+    let ToolCallResult::DataFrame { data: response, .. } = result.unwrap() else {
+        panic!("Expected DataFrame result");
+    };
     
     // Verify key company information
     assert_eq!(response.get("Symbol").and_then(|v| v.as_str()), Some("AAPL"));
@@ -264,7 +274,9 @@ async fn test_earnings() {
     let result = call_tool(&client, request).await;
     assert!(result.is_ok(), "Failed to call earnings: {:?}", result.err());
     
-    let response = result.unwrap();
+    let ToolCallResult::DataFrame { data: response, .. } = result.unwrap() else {
+        panic!("Expected DataFrame result");
+    };
     // Earnings typically has quarterlyEarnings and annualEarnings
     assert!(response.get("symbol").is_some() || response.get("quarterlyEarnings").is_some());
 }
@@ -284,7 +296,9 @@ async fn test_earnings_estimates() {
     let result = call_tool(&client, request).await;
     assert!(result.is_ok(), "Failed to call earnings_estimates: {:?}", result.err());
     
-    let response = result.unwrap();
+    let ToolCallResult::DataFrame { data: response, .. } = result.unwrap() else {
+        panic!("Expected DataFrame result");
+    };
     // Check for typical earnings estimates response structure
     assert!(response.is_object(), "Expected object response");
 }
@@ -303,7 +317,9 @@ async fn test_income_statement() {
     let result = call_tool(&client, request).await;
     assert!(result.is_ok(), "Failed to call income_statement: {:?}", result.err());
     
-    let response = result.unwrap();
+    let ToolCallResult::DataFrame { data: response, .. } = result.unwrap() else {
+        panic!("Expected DataFrame result");
+    };
     
     // Verify symbol
     assert_eq!(response.get("symbol").and_then(|v| v.as_str()), Some("NVDA"));
@@ -349,7 +365,9 @@ async fn test_balance_sheet() {
     let result = call_tool(&client, request).await;
     assert!(result.is_ok(), "Failed to call balance_sheet: {:?}", result.err());
     
-    let response = result.unwrap();
+    let ToolCallResult::DataFrame { data: response, .. } = result.unwrap() else {
+        panic!("Expected DataFrame result");
+    };
     
     // Verify symbol
     assert_eq!(response.get("symbol").and_then(|v| v.as_str()), Some("JPM"));
@@ -390,7 +408,9 @@ async fn test_cash_flow() {
     let result = call_tool(&client, request).await;
     assert!(result.is_ok(), "Failed to call cash_flow: {:?}", result.err());
     
-    let response = result.unwrap();
+    let ToolCallResult::DataFrame { data: response, .. } = result.unwrap() else {
+        panic!("Expected DataFrame result");
+    };
     
     // Verify symbol
     assert_eq!(response.get("symbol").and_then(|v| v.as_str()), Some("NFLX"));

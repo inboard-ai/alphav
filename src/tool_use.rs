@@ -2,7 +2,6 @@
 //!
 //! This module provides a progressive discovery interface for the Alpha Vantage API.
 
-use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use crate::client::AlphaVantage;
@@ -12,17 +11,21 @@ use crate::request::common::{Interval, OutputSize};
 use crate::rest;
 use crate::rest::fundamentals;
 
-/// Tool information
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ToolInfo {
-    /// Tool unique identifier
-    pub id: String,
-    /// Human-readable tool name
-    pub name: String,
-    /// Description of what the tool does
-    pub description: String,
-    /// JSON Schema for the tool's parameters
-    pub schema: Value,
+// Always use emporium-core types
+pub use emporium_core::{ColumnDef, Schema, ToolInfo};
+
+/// Result from executing a tool - can be text or structured data
+#[derive(Debug, Clone)]
+pub enum ToolCallResult {
+    /// Plain text result
+    Text(String),
+    /// Structured tabular data with schema
+    DataFrame {
+        /// The actual JSON data
+        data: Value,
+        /// Column definitions describing the data structure
+        schema: Schema,
+    },
 }
 
 /// Get details for a specific tool
@@ -212,7 +215,7 @@ pub fn list_tools() -> Vec<ToolInfo> {
 }
 
 /// Universal tool caller
-pub async fn call_tool<Client: Request>(client: &AlphaVantage<Client>, request: Value) -> Result<Value> {
+pub async fn call_tool<Client: Request>(client: &AlphaVantage<Client>, request: Value) -> Result<ToolCallResult> {
     let tool = request
         .get("tool")
         .and_then(|v| v.as_str())
@@ -256,7 +259,9 @@ pub async fn call_tool<Client: Request>(client: &AlphaVantage<Client>, request: 
             }
 
             let response = query.get().await?;
-            serde_json::from_str(&response).map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))
+            let data: Value = serde_json::from_str(&response)
+                .map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))?;
+            Ok(ToolCallResult::DataFrame { data, schema: vec![] })
         }
         "time_series_daily" => {
             let symbol = params
@@ -276,7 +281,9 @@ pub async fn call_tool<Client: Request>(client: &AlphaVantage<Client>, request: 
             }
 
             let response = query.get().await?;
-            serde_json::from_str(&response).map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))
+            let data: Value = serde_json::from_str(&response)
+                .map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))?;
+            Ok(ToolCallResult::DataFrame { data, schema: vec![] })
         }
         "time_series_weekly" => {
             let symbol = params
@@ -286,7 +293,9 @@ pub async fn call_tool<Client: Request>(client: &AlphaVantage<Client>, request: 
 
             let query = rest::time_series::weekly(client, symbol);
             let response = query.get().await?;
-            serde_json::from_str(&response).map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))
+            let data: Value = serde_json::from_str(&response)
+                .map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))?;
+            Ok(ToolCallResult::DataFrame { data, schema: vec![] })
         }
         "time_series_monthly" => {
             let symbol = params
@@ -296,7 +305,9 @@ pub async fn call_tool<Client: Request>(client: &AlphaVantage<Client>, request: 
 
             let query = rest::time_series::monthly(client, symbol);
             let response = query.get().await?;
-            serde_json::from_str(&response).map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))
+            let data: Value = serde_json::from_str(&response)
+                .map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))?;
+            Ok(ToolCallResult::DataFrame { data, schema: vec![] })
         }
 
         // Fundamental Data Endpoints
@@ -308,7 +319,9 @@ pub async fn call_tool<Client: Request>(client: &AlphaVantage<Client>, request: 
 
             let query = fundamentals::company_overview(client, symbol);
             let response = query.get().await?;
-            serde_json::from_str(&response).map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))
+            let data: Value = serde_json::from_str(&response)
+                .map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))?;
+            Ok(ToolCallResult::DataFrame { data, schema: vec![] })
         }
         "earnings" => {
             let symbol = params
@@ -318,7 +331,9 @@ pub async fn call_tool<Client: Request>(client: &AlphaVantage<Client>, request: 
 
             let query = fundamentals::earnings(client, symbol);
             let response = query.get().await?;
-            serde_json::from_str(&response).map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))
+            let data: Value = serde_json::from_str(&response)
+                .map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))?;
+            Ok(ToolCallResult::DataFrame { data, schema: vec![] })
         }
         "earnings_estimates" => {
             let symbol = params
@@ -333,7 +348,9 @@ pub async fn call_tool<Client: Request>(client: &AlphaVantage<Client>, request: 
             }
 
             let response = query.get().await?;
-            serde_json::from_str(&response).map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))
+            let data: Value = serde_json::from_str(&response)
+                .map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))?;
+            Ok(ToolCallResult::DataFrame { data, schema: vec![] })
         }
         "income_statement" => {
             let symbol = params
@@ -343,7 +360,9 @@ pub async fn call_tool<Client: Request>(client: &AlphaVantage<Client>, request: 
 
             let query = fundamentals::income_statement(client, symbol);
             let response = query.get().await?;
-            serde_json::from_str(&response).map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))
+            let data: Value = serde_json::from_str(&response)
+                .map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))?;
+            Ok(ToolCallResult::DataFrame { data, schema: vec![] })
         }
         "balance_sheet" => {
             let symbol = params
@@ -353,7 +372,9 @@ pub async fn call_tool<Client: Request>(client: &AlphaVantage<Client>, request: 
 
             let query = fundamentals::balance_sheet(client, symbol);
             let response = query.get().await?;
-            serde_json::from_str(&response).map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))
+            let data: Value = serde_json::from_str(&response)
+                .map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))?;
+            Ok(ToolCallResult::DataFrame { data, schema: vec![] })
         }
         "cash_flow" => {
             let symbol = params
@@ -363,7 +384,9 @@ pub async fn call_tool<Client: Request>(client: &AlphaVantage<Client>, request: 
 
             let query = fundamentals::cash_flow(client, symbol);
             let response = query.get().await?;
-            serde_json::from_str(&response).map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))
+            let data: Value = serde_json::from_str(&response)
+                .map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))?;
+            Ok(ToolCallResult::DataFrame { data, schema: vec![] })
         }
 
         _ => Err(Error::Custom(format!("Unknown tool: {tool}"))),
