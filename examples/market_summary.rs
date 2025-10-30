@@ -375,11 +375,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     // Print 2x2 table with title and headers on same line
-    println!(
-        "Valuation Multiples{:>35} {:>15}",
-        fy_actual_year,
-        fy_estimate_year
-    );
+    println!("Valuation Multiples{:>35} {:>15}", fy_actual_year, fy_estimate_year);
     println!("{:─<75}", "");
     println!(
         "{:<43} {:>14.2}x {:>14.2}x",

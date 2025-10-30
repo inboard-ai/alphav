@@ -56,9 +56,11 @@ impl<'a, C: Request, P: Processor + 'a> Execute for BalanceSheet<'a, C, P> {
             .api_key()
             .ok_or_else(|| crate::error::Error::Custom("API key not set".to_string()))?;
 
-        let params = ["function=BALANCE_SHEET".to_string(),
+        let params = [
+            "function=BALANCE_SHEET".to_string(),
             format!("symbol={}", self.symbol),
-            format!("apikey={api_key}")];
+            format!("apikey={api_key}"),
+        ];
 
         let url = format!("https://www.alphavantage.co/query?{}", params.join("&"));
 

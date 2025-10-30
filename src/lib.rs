@@ -43,8 +43,10 @@
 //!
 //! # Features
 //!
-//! - **`reqwest`** (default) - Uses [`reqwest`](https://docs.rs/reqwest) as the HTTP client.
-//!   Disable this if you want to provide your own HTTP client implementation.
+//! - **`hyper`** (default) - Uses [`hyper`](https://docs.rs/hyper) as the HTTP client (lightweight and fast).
+//!
+//! - **`reqwest`** - Alternative HTTP client using [`reqwest`](https://docs.rs/reqwest) (more features).
+//!   To use reqwest instead: `default-features = false, features = ["reqwest", "decoder"]`.
 //!
 //! - **`decoder`** (default) - Enables typed response decoding using the [`decoder`](https://docs.rs/decoder) crate.
 //!
@@ -64,6 +66,7 @@ pub mod rest;
 
 pub mod execute;
 pub mod processor;
+pub mod tool_use;
 
 pub use error::{Error, Result};
 pub use request::Request;
@@ -71,16 +74,16 @@ pub use response::Response;
 
 /// The main Alpha Vantage API client with the default HTTP client.
 ///
+/// - When `hyper` feature is enabled (default): uses `HyperClient`
 /// - When `reqwest` feature is enabled: uses `reqwest::Client`
-/// - When `hyper` feature is enabled (and reqwest is not): uses `HyperClient`
 /// - Otherwise: use `client::AlphaVantage<YourClient>` directly
 #[cfg(feature = "reqwest")]
 pub type AlphaVantage = client::AlphaVantage<reqwest::Client>;
 
 /// The main Alpha Vantage API client with the default HTTP client.
 ///
+/// - When `hyper` feature is enabled (default): uses `HyperClient`
 /// - When `reqwest` feature is enabled: uses `reqwest::Client`
-/// - When `hyper` feature is enabled (and reqwest is not): uses `HyperClient`
 /// - Otherwise: use `client::AlphaVantage<YourClient>` directly
 #[cfg(all(feature = "hyper", not(feature = "reqwest")))]
 pub type AlphaVantage = client::AlphaVantage<request::HyperClient>;

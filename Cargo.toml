@@ -60,3 +60,7 @@ table = [
     "dep:serde_json",
     "dep:schemars",
 ]
+
+[[example]]
+name = "market_summary"
+required-features = ["table"]
