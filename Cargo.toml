@@ -72,6 +72,10 @@ table = [
 name = "market_summary"
 required-features = ["table"]
 
+[[example]]
+name = "comprehensive_test"
+required-features = ["table"]
+
 # Uncomment for local development
 # [patch.'https://github.com/inboard-ai/emporium.git']
 # emporium-core = { path = "../emporium/core" }
