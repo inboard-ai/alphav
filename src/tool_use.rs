@@ -219,166 +219,322 @@ pub fn list_tools() -> Vec<ToolInfo> {
 /// Transform time_series_intraday response (1min, 5min, 15min, 30min, 60min intervals)
 fn transform_intraday_response(response: Value, interval: &str) -> Result<(Value, Option<Value>, Schema)> {
     let metadata = response.get("Meta Data").cloned();
-    
+
     // The exact key for intraday data
     let time_series_key = format!("Time Series ({})", interval);
     let time_series_obj = response
         .get(&time_series_key)
         .and_then(|v| v.as_object())
         .ok_or_else(|| Error::Custom(format!("No '{}' data found in response", time_series_key)))?;
-    
+
     let mut data_array: Vec<Value> = Vec::new();
     for (timestamp, values) in time_series_obj {
         if let Some(values_obj) = values.as_object() {
             let mut row = serde_json::Map::new();
             row.insert("timestamp".to_string(), json!(timestamp));
-            row.insert("open".to_string(), values_obj.get("1. open").cloned().unwrap_or(json!(null)));
-            row.insert("high".to_string(), values_obj.get("2. high").cloned().unwrap_or(json!(null)));
-            row.insert("low".to_string(), values_obj.get("3. low").cloned().unwrap_or(json!(null)));
-            row.insert("close".to_string(), values_obj.get("4. close").cloned().unwrap_or(json!(null)));
-            row.insert("volume".to_string(), values_obj.get("5. volume").cloned().unwrap_or(json!(null)));
+            row.insert(
+                "open".to_string(),
+                values_obj.get("1. open").cloned().unwrap_or(json!(null)),
+            );
+            row.insert(
+                "high".to_string(),
+                values_obj.get("2. high").cloned().unwrap_or(json!(null)),
+            );
+            row.insert(
+                "low".to_string(),
+                values_obj.get("3. low").cloned().unwrap_or(json!(null)),
+            );
+            row.insert(
+                "close".to_string(),
+                values_obj.get("4. close").cloned().unwrap_or(json!(null)),
+            );
+            row.insert(
+                "volume".to_string(),
+                values_obj.get("5. volume").cloned().unwrap_or(json!(null)),
+            );
             data_array.push(Value::Object(row));
         }
     }
-    
+
     data_array.sort_by(|a, b| {
         let ts_a = a.get("timestamp").and_then(|v| v.as_str()).unwrap_or("");
         let ts_b = b.get("timestamp").and_then(|v| v.as_str()).unwrap_or("");
         ts_b.cmp(ts_a)
     });
-    
+
     let schema = vec![
-        ColumnDef { name: "timestamp".to_string(), alias: String::new(), dtype: "string".to_string() },
-        ColumnDef { name: "open".to_string(), alias: String::new(), dtype: "number".to_string() },
-        ColumnDef { name: "high".to_string(), alias: String::new(), dtype: "number".to_string() },
-        ColumnDef { name: "low".to_string(), alias: String::new(), dtype: "number".to_string() },
-        ColumnDef { name: "close".to_string(), alias: String::new(), dtype: "number".to_string() },
-        ColumnDef { name: "volume".to_string(), alias: String::new(), dtype: "number".to_string() },
+        ColumnDef {
+            name: "timestamp".to_string(),
+            alias: "Timestamp".to_string(),
+            dtype: "string".to_string(),
+        },
+        ColumnDef {
+            name: "open".to_string(),
+            alias: "Open".to_string(),
+            dtype: "number".to_string(),
+        },
+        ColumnDef {
+            name: "high".to_string(),
+            alias: "High".to_string(),
+            dtype: "number".to_string(),
+        },
+        ColumnDef {
+            name: "low".to_string(),
+            alias: "Low".to_string(),
+            dtype: "number".to_string(),
+        },
+        ColumnDef {
+            name: "close".to_string(),
+            alias: "Close".to_string(),
+            dtype: "number".to_string(),
+        },
+        ColumnDef {
+            name: "volume".to_string(),
+            alias: "Volume".to_string(),
+            dtype: "number".to_string(),
+        },
     ];
-    
+
     Ok((json!(data_array), metadata, schema))
 }
 
 /// Transform time_series_daily response
 fn transform_daily_response(response: Value) -> Result<(Value, Option<Value>, Schema)> {
     let metadata = response.get("Meta Data").cloned();
-    
+
     let time_series_obj = response
         .get("Time Series (Daily)")
         .and_then(|v| v.as_object())
         .ok_or_else(|| Error::Custom("No 'Time Series (Daily)' data found in response".to_string()))?;
-    
+
     let mut data_array: Vec<Value> = Vec::new();
     for (date, values) in time_series_obj {
         if let Some(values_obj) = values.as_object() {
             let mut row = serde_json::Map::new();
             row.insert("date".to_string(), json!(date));
-            row.insert("open".to_string(), values_obj.get("1. open").cloned().unwrap_or(json!(null)));
-            row.insert("high".to_string(), values_obj.get("2. high").cloned().unwrap_or(json!(null)));
-            row.insert("low".to_string(), values_obj.get("3. low").cloned().unwrap_or(json!(null)));
-            row.insert("close".to_string(), values_obj.get("4. close").cloned().unwrap_or(json!(null)));
-            row.insert("volume".to_string(), values_obj.get("5. volume").cloned().unwrap_or(json!(null)));
+            row.insert(
+                "open".to_string(),
+                values_obj.get("1. open").cloned().unwrap_or(json!(null)),
+            );
+            row.insert(
+                "high".to_string(),
+                values_obj.get("2. high").cloned().unwrap_or(json!(null)),
+            );
+            row.insert(
+                "low".to_string(),
+                values_obj.get("3. low").cloned().unwrap_or(json!(null)),
+            );
+            row.insert(
+                "close".to_string(),
+                values_obj.get("4. close").cloned().unwrap_or(json!(null)),
+            );
+            row.insert(
+                "volume".to_string(),
+                values_obj.get("5. volume").cloned().unwrap_or(json!(null)),
+            );
             data_array.push(Value::Object(row));
         }
     }
-    
+
     data_array.sort_by(|a, b| {
         let date_a = a.get("date").and_then(|v| v.as_str()).unwrap_or("");
         let date_b = b.get("date").and_then(|v| v.as_str()).unwrap_or("");
         date_b.cmp(date_a)
     });
-    
+
     let schema = vec![
-        ColumnDef { name: "date".to_string(), alias: String::new(), dtype: "string".to_string() },
-        ColumnDef { name: "open".to_string(), alias: String::new(), dtype: "number".to_string() },
-        ColumnDef { name: "high".to_string(), alias: String::new(), dtype: "number".to_string() },
-        ColumnDef { name: "low".to_string(), alias: String::new(), dtype: "number".to_string() },
-        ColumnDef { name: "close".to_string(), alias: String::new(), dtype: "number".to_string() },
-        ColumnDef { name: "volume".to_string(), alias: String::new(), dtype: "number".to_string() },
+        ColumnDef {
+            name: "date".to_string(),
+            alias: "Date".to_string(),
+            dtype: "string".to_string(),
+        },
+        ColumnDef {
+            name: "open".to_string(),
+            alias: "Open".to_string(),
+            dtype: "number".to_string(),
+        },
+        ColumnDef {
+            name: "high".to_string(),
+            alias: "High".to_string(),
+            dtype: "number".to_string(),
+        },
+        ColumnDef {
+            name: "low".to_string(),
+            alias: "Low".to_string(),
+            dtype: "number".to_string(),
+        },
+        ColumnDef {
+            name: "close".to_string(),
+            alias: "Close".to_string(),
+            dtype: "number".to_string(),
+        },
+        ColumnDef {
+            name: "volume".to_string(),
+            alias: "Volume".to_string(),
+            dtype: "number".to_string(),
+        },
     ];
-    
+
     Ok((json!(data_array), metadata, schema))
 }
 
 /// Transform time_series_weekly response
 fn transform_weekly_response(response: Value) -> Result<(Value, Option<Value>, Schema)> {
     let metadata = response.get("Meta Data").cloned();
-    
+
     let time_series_obj = response
         .get("Weekly Time Series")
         .and_then(|v| v.as_object())
         .ok_or_else(|| Error::Custom("No 'Weekly Time Series' data found in response".to_string()))?;
-    
+
     let mut data_array: Vec<Value> = Vec::new();
     for (date, values) in time_series_obj {
         if let Some(values_obj) = values.as_object() {
             let mut row = serde_json::Map::new();
             row.insert("week_ending".to_string(), json!(date));
-            row.insert("open".to_string(), values_obj.get("1. open").cloned().unwrap_or(json!(null)));
-            row.insert("high".to_string(), values_obj.get("2. high").cloned().unwrap_or(json!(null)));
-            row.insert("low".to_string(), values_obj.get("3. low").cloned().unwrap_or(json!(null)));
-            row.insert("close".to_string(), values_obj.get("4. close").cloned().unwrap_or(json!(null)));
-            row.insert("volume".to_string(), values_obj.get("5. volume").cloned().unwrap_or(json!(null)));
+            row.insert(
+                "open".to_string(),
+                values_obj.get("1. open").cloned().unwrap_or(json!(null)),
+            );
+            row.insert(
+                "high".to_string(),
+                values_obj.get("2. high").cloned().unwrap_or(json!(null)),
+            );
+            row.insert(
+                "low".to_string(),
+                values_obj.get("3. low").cloned().unwrap_or(json!(null)),
+            );
+            row.insert(
+                "close".to_string(),
+                values_obj.get("4. close").cloned().unwrap_or(json!(null)),
+            );
+            row.insert(
+                "volume".to_string(),
+                values_obj.get("5. volume").cloned().unwrap_or(json!(null)),
+            );
             data_array.push(Value::Object(row));
         }
     }
-    
+
     data_array.sort_by(|a, b| {
         let date_a = a.get("week_ending").and_then(|v| v.as_str()).unwrap_or("");
         let date_b = b.get("week_ending").and_then(|v| v.as_str()).unwrap_or("");
         date_b.cmp(date_a)
     });
-    
+
     let schema = vec![
-        ColumnDef { name: "week_ending".to_string(), alias: String::new(), dtype: "string".to_string() },
-        ColumnDef { name: "open".to_string(), alias: String::new(), dtype: "number".to_string() },
-        ColumnDef { name: "high".to_string(), alias: String::new(), dtype: "number".to_string() },
-        ColumnDef { name: "low".to_string(), alias: String::new(), dtype: "number".to_string() },
-        ColumnDef { name: "close".to_string(), alias: String::new(), dtype: "number".to_string() },
-        ColumnDef { name: "volume".to_string(), alias: String::new(), dtype: "number".to_string() },
+        ColumnDef {
+            name: "week_ending".to_string(),
+            alias: "Week Ending".to_string(),
+            dtype: "string".to_string(),
+        },
+        ColumnDef {
+            name: "open".to_string(),
+            alias: "Open".to_string(),
+            dtype: "number".to_string(),
+        },
+        ColumnDef {
+            name: "high".to_string(),
+            alias: "High".to_string(),
+            dtype: "number".to_string(),
+        },
+        ColumnDef {
+            name: "low".to_string(),
+            alias: "Low".to_string(),
+            dtype: "number".to_string(),
+        },
+        ColumnDef {
+            name: "close".to_string(),
+            alias: "Close".to_string(),
+            dtype: "number".to_string(),
+        },
+        ColumnDef {
+            name: "volume".to_string(),
+            alias: "Volume".to_string(),
+            dtype: "number".to_string(),
+        },
     ];
-    
+
     Ok((json!(data_array), metadata, schema))
 }
 
 /// Transform time_series_monthly response
 fn transform_monthly_response(response: Value) -> Result<(Value, Option<Value>, Schema)> {
     let metadata = response.get("Meta Data").cloned();
-    
+
     let time_series_obj = response
         .get("Monthly Time Series")
         .and_then(|v| v.as_object())
         .ok_or_else(|| Error::Custom("No 'Monthly Time Series' data found in response".to_string()))?;
-    
+
     let mut data_array: Vec<Value> = Vec::new();
     for (date, values) in time_series_obj {
         if let Some(values_obj) = values.as_object() {
             let mut row = serde_json::Map::new();
             row.insert("month".to_string(), json!(date));
-            row.insert("open".to_string(), values_obj.get("1. open").cloned().unwrap_or(json!(null)));
-            row.insert("high".to_string(), values_obj.get("2. high").cloned().unwrap_or(json!(null)));
-            row.insert("low".to_string(), values_obj.get("3. low").cloned().unwrap_or(json!(null)));
-            row.insert("close".to_string(), values_obj.get("4. close").cloned().unwrap_or(json!(null)));
-            row.insert("volume".to_string(), values_obj.get("5. volume").cloned().unwrap_or(json!(null)));
+            row.insert(
+                "open".to_string(),
+                values_obj.get("1. open").cloned().unwrap_or(json!(null)),
+            );
+            row.insert(
+                "high".to_string(),
+                values_obj.get("2. high").cloned().unwrap_or(json!(null)),
+            );
+            row.insert(
+                "low".to_string(),
+                values_obj.get("3. low").cloned().unwrap_or(json!(null)),
+            );
+            row.insert(
+                "close".to_string(),
+                values_obj.get("4. close").cloned().unwrap_or(json!(null)),
+            );
+            row.insert(
+                "volume".to_string(),
+                values_obj.get("5. volume").cloned().unwrap_or(json!(null)),
+            );
             data_array.push(Value::Object(row));
         }
     }
-    
+
     data_array.sort_by(|a, b| {
         let date_a = a.get("month").and_then(|v| v.as_str()).unwrap_or("");
         let date_b = b.get("month").and_then(|v| v.as_str()).unwrap_or("");
         date_b.cmp(date_a)
     });
-    
+
     let schema = vec![
-        ColumnDef { name: "month".to_string(), alias: String::new(), dtype: "string".to_string() },
-        ColumnDef { name: "open".to_string(), alias: String::new(), dtype: "number".to_string() },
-        ColumnDef { name: "high".to_string(), alias: String::new(), dtype: "number".to_string() },
-        ColumnDef { name: "low".to_string(), alias: String::new(), dtype: "number".to_string() },
-        ColumnDef { name: "close".to_string(), alias: String::new(), dtype: "number".to_string() },
-        ColumnDef { name: "volume".to_string(), alias: String::new(), dtype: "number".to_string() },
+        ColumnDef {
+            name: "month".to_string(),
+            alias: "Month".to_string(),
+            dtype: "string".to_string(),
+        },
+        ColumnDef {
+            name: "open".to_string(),
+            alias: "Open".to_string(),
+            dtype: "number".to_string(),
+        },
+        ColumnDef {
+            name: "high".to_string(),
+            alias: "High".to_string(),
+            dtype: "number".to_string(),
+        },
+        ColumnDef {
+            name: "low".to_string(),
+            alias: "Low".to_string(),
+            dtype: "number".to_string(),
+        },
+        ColumnDef {
+            name: "close".to_string(),
+            alias: "Close".to_string(),
+            dtype: "number".to_string(),
+        },
+        ColumnDef {
+            name: "volume".to_string(),
+            alias: "Volume".to_string(),
+            dtype: "number".to_string(),
+        },
     ];
-    
+
     Ok((json!(data_array), metadata, schema))
 }
 
@@ -427,8 +583,8 @@ pub async fn call_tool<Client: Request>(client: &AlphaVantage<Client>, request: 
             }
 
             let response = query.get().await?;
-            let response_json: Value = serde_json::from_str(&response)
-                .map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))?;
+            let response_json: Value =
+                serde_json::from_str(&response).map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))?;
             let (data, metadata, schema) = transform_intraday_response(response_json, interval)?;
             Ok(ToolCallResult::DataFrame { data, schema, metadata })
         }
@@ -450,8 +606,8 @@ pub async fn call_tool<Client: Request>(client: &AlphaVantage<Client>, request: 
             }
 
             let response = query.get().await?;
-            let response_json: Value = serde_json::from_str(&response)
-                .map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))?;
+            let response_json: Value =
+                serde_json::from_str(&response).map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))?;
             let (data, metadata, schema) = transform_daily_response(response_json)?;
             Ok(ToolCallResult::DataFrame { data, schema, metadata })
         }
@@ -463,8 +619,8 @@ pub async fn call_tool<Client: Request>(client: &AlphaVantage<Client>, request: 
 
             let query = rest::time_series::weekly(client, symbol);
             let response = query.get().await?;
-            let response_json: Value = serde_json::from_str(&response)
-                .map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))?;
+            let response_json: Value =
+                serde_json::from_str(&response).map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))?;
             let (data, metadata, schema) = transform_weekly_response(response_json)?;
             Ok(ToolCallResult::DataFrame { data, schema, metadata })
         }
@@ -476,8 +632,8 @@ pub async fn call_tool<Client: Request>(client: &AlphaVantage<Client>, request: 
 
             let query = rest::time_series::monthly(client, symbol);
             let response = query.get().await?;
-            let response_json: Value = serde_json::from_str(&response)
-                .map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))?;
+            let response_json: Value =
+                serde_json::from_str(&response).map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))?;
             let (data, metadata, schema) = transform_monthly_response(response_json)?;
             Ok(ToolCallResult::DataFrame { data, schema, metadata })
         }
@@ -491,9 +647,13 @@ pub async fn call_tool<Client: Request>(client: &AlphaVantage<Client>, request: 
 
             let query = fundamentals::company_overview(client, symbol);
             let response = query.get().await?;
-            let data: Value = serde_json::from_str(&response)
-                .map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))?;
-            Ok(ToolCallResult::DataFrame { data, schema: vec![], metadata: None })
+            let data: Value =
+                serde_json::from_str(&response).map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))?;
+            Ok(ToolCallResult::DataFrame {
+                data,
+                schema: vec![],
+                metadata: None,
+            })
         }
         "earnings" => {
             let symbol = params
@@ -503,9 +663,13 @@ pub async fn call_tool<Client: Request>(client: &AlphaVantage<Client>, request: 
 
             let query = fundamentals::earnings(client, symbol);
             let response = query.get().await?;
-            let data: Value = serde_json::from_str(&response)
-                .map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))?;
-            Ok(ToolCallResult::DataFrame { data, schema: vec![], metadata: None })
+            let data: Value =
+                serde_json::from_str(&response).map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))?;
+            Ok(ToolCallResult::DataFrame {
+                data,
+                schema: vec![],
+                metadata: None,
+            })
         }
         "earnings_estimates" => {
             let symbol = params
@@ -520,9 +684,13 @@ pub async fn call_tool<Client: Request>(client: &AlphaVantage<Client>, request: 
             }
 
             let response = query.get().await?;
-            let data: Value = serde_json::from_str(&response)
-                .map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))?;
-            Ok(ToolCallResult::DataFrame { data, schema: vec![], metadata: None })
+            let data: Value =
+                serde_json::from_str(&response).map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))?;
+            Ok(ToolCallResult::DataFrame {
+                data,
+                schema: vec![],
+                metadata: None,
+            })
         }
         "income_statement" => {
             let symbol = params
@@ -532,9 +700,13 @@ pub async fn call_tool<Client: Request>(client: &AlphaVantage<Client>, request: 
 
             let query = fundamentals::income_statement(client, symbol);
             let response = query.get().await?;
-            let data: Value = serde_json::from_str(&response)
-                .map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))?;
-            Ok(ToolCallResult::DataFrame { data, schema: vec![], metadata: None })
+            let data: Value =
+                serde_json::from_str(&response).map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))?;
+            Ok(ToolCallResult::DataFrame {
+                data,
+                schema: vec![],
+                metadata: None,
+            })
         }
         "balance_sheet" => {
             let symbol = params
@@ -544,9 +716,13 @@ pub async fn call_tool<Client: Request>(client: &AlphaVantage<Client>, request: 
 
             let query = fundamentals::balance_sheet(client, symbol);
             let response = query.get().await?;
-            let data: Value = serde_json::from_str(&response)
-                .map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))?;
-            Ok(ToolCallResult::DataFrame { data, schema: vec![], metadata: None })
+            let data: Value =
+                serde_json::from_str(&response).map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))?;
+            Ok(ToolCallResult::DataFrame {
+                data,
+                schema: vec![],
+                metadata: None,
+            })
         }
         "cash_flow" => {
             let symbol = params
@@ -556,9 +732,13 @@ pub async fn call_tool<Client: Request>(client: &AlphaVantage<Client>, request: 
 
             let query = fundamentals::cash_flow(client, symbol);
             let response = query.get().await?;
-            let data: Value = serde_json::from_str(&response)
-                .map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))?;
-            Ok(ToolCallResult::DataFrame { data, schema: vec![], metadata: None })
+            let data: Value =
+                serde_json::from_str(&response).map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))?;
+            Ok(ToolCallResult::DataFrame {
+                data,
+                schema: vec![],
+                metadata: None,
+            })
         }
 
         _ => Err(Error::Custom(format!("Unknown tool: {tool}"))),

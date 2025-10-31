@@ -27,7 +27,9 @@ decoder = { version = "0.0.3", optional = true }
 serde = { version = "1.0", optional = true, features = ["derive"] }
 serde_json = { version = "1.0", optional = true }
 serde_urlencoded = { version = "0.7", optional = true }
-polars-core = { version = "0.51", optional = true, default-features = false, features = ["fmt"] }
+polars-core = { version = "0.51", optional = true, default-features = false, features = [
+    "fmt",
+] }
 polars-io = { version = "0.51", optional = true, default-features = false, features = [
     "json",
 ] }
@@ -36,6 +38,10 @@ arc-swap = { version = "1.7.1", optional = true }
 emporium-core = { git = "https://github.com/inboard-ai/emporium.git", branch = "dev" }
 
 [dev-dependencies]
+polars-core = { version = "0.51", default-features = false, features = [
+    "fmt_no_tty",
+] }
+
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 decoder = { version = "0.0.3" }
 dotenvy = { version = "0.15" }
