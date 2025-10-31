@@ -26,9 +26,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         });
         
         match call_tool(&client, request).await {
-            Ok(ToolCallResult::DataFrame { data, schema }) => {
+            Ok(ToolCallResult::DataFrame { data, schema, metadata }) => {
                 println!("Success! Response: {}", serde_json::to_string_pretty(&data)?);
                 println!("Schema columns: {}", schema.len());
+                if let Some(meta) = metadata {
+                    println!("Metadata: {}", serde_json::to_string_pretty(&meta)?);
+                }
             }
             Ok(ToolCallResult::Text(text)) => {
                 println!("Success! Response: {}", text);
