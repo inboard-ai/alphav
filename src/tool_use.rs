@@ -13,22 +13,7 @@ use crate::rest::fundamentals;
 
 // Always use emporium-core types
 pub use emporium_core::{ColumnDef, Schema, ToolInfo};
-
-/// Result from executing a tool - can be text or structured data
-#[derive(Debug, Clone)]
-pub enum ToolCallResult {
-    /// Plain text result
-    Text(String),
-    /// Structured tabular data with schema
-    DataFrame {
-        /// The actual JSON data
-        data: Value,
-        /// Column definitions describing the data structure
-        schema: Schema,
-        /// Optional metadata from the API response
-        metadata: Option<Value>,
-    },
-}
+pub use emporium_core::tool::{Label, ToolResult};
 
 /// Get details for a specific tool
 pub fn get_tool_details(tool_id: &str) -> Option<ToolInfo> {
@@ -887,7 +872,7 @@ fn transform_cash_flow_response(response: Value) -> Result<(Value, Option<Value>
 }
 
 /// Universal tool caller
-pub async fn call_tool<Client: Request>(client: &AlphaVantage<Client>, request: Value) -> Result<ToolCallResult> {
+pub async fn call_tool<Client: Request>(client: &AlphaVantage<Client>, request: Value) -> Result<ToolResult> {
     let tool = request
         .get("tool")
         .and_then(|v| v.as_str())
@@ -934,7 +919,7 @@ pub async fn call_tool<Client: Request>(client: &AlphaVantage<Client>, request: 
             let response_json: Value =
                 serde_json::from_str(&response).map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))?;
             let (data, metadata, schema) = transform_intraday_response(response_json, interval)?;
-            Ok(ToolCallResult::DataFrame { data, schema, metadata })
+            Ok(ToolResult::columnar(data, schema, metadata).with_label(Label::new(symbol)))
         }
         "time_series_daily" => {
             let symbol = params
@@ -957,7 +942,7 @@ pub async fn call_tool<Client: Request>(client: &AlphaVantage<Client>, request: 
             let response_json: Value =
                 serde_json::from_str(&response).map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))?;
             let (data, metadata, schema) = transform_daily_response(response_json)?;
-            Ok(ToolCallResult::DataFrame { data, schema, metadata })
+            Ok(ToolResult::columnar(data, schema, metadata).with_label(Label::new(symbol)))
         }
         "time_series_weekly" => {
             let symbol = params
@@ -970,7 +955,7 @@ pub async fn call_tool<Client: Request>(client: &AlphaVantage<Client>, request: 
             let response_json: Value =
                 serde_json::from_str(&response).map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))?;
             let (data, metadata, schema) = transform_weekly_response(response_json)?;
-            Ok(ToolCallResult::DataFrame { data, schema, metadata })
+            Ok(ToolResult::columnar(data, schema, metadata).with_label(Label::new(symbol)))
         }
         "time_series_monthly" => {
             let symbol = params
@@ -983,7 +968,7 @@ pub async fn call_tool<Client: Request>(client: &AlphaVantage<Client>, request: 
             let response_json: Value =
                 serde_json::from_str(&response).map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))?;
             let (data, metadata, schema) = transform_monthly_response(response_json)?;
-            Ok(ToolCallResult::DataFrame { data, schema, metadata })
+            Ok(ToolResult::columnar(data, schema, metadata).with_label(Label::new(symbol)))
         }
 
         // Fundamental Data Endpoints
@@ -998,7 +983,7 @@ pub async fn call_tool<Client: Request>(client: &AlphaVantage<Client>, request: 
             let response_json: Value =
                 serde_json::from_str(&response).map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))?;
             let (data, metadata, schema) = transform_company_overview_response(response_json)?;
-            Ok(ToolCallResult::DataFrame { data, schema, metadata })
+            Ok(ToolResult::columnar(data, schema, metadata).with_label(Label::new(symbol)))
         }
         "earnings" => {
             let symbol = params
@@ -1011,7 +996,7 @@ pub async fn call_tool<Client: Request>(client: &AlphaVantage<Client>, request: 
             let response_json: Value =
                 serde_json::from_str(&response).map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))?;
             let (data, metadata, schema) = transform_earnings_response(response_json)?;
-            Ok(ToolCallResult::DataFrame { data, schema, metadata })
+            Ok(ToolResult::columnar(data, schema, metadata).with_label(Label::new(symbol)))
         }
         "earnings_estimates" => {
             let symbol = params
@@ -1029,7 +1014,7 @@ pub async fn call_tool<Client: Request>(client: &AlphaVantage<Client>, request: 
             let response_json: Value =
                 serde_json::from_str(&response).map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))?;
             let (data, metadata, schema) = transform_earnings_estimates_response(response_json)?;
-            Ok(ToolCallResult::DataFrame { data, schema, metadata })
+            Ok(ToolResult::columnar(data, schema, metadata).with_label(Label::new(symbol)))
         }
         "income_statement" => {
             let symbol = params
@@ -1042,7 +1027,7 @@ pub async fn call_tool<Client: Request>(client: &AlphaVantage<Client>, request: 
             let response_json: Value =
                 serde_json::from_str(&response).map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))?;
             let (data, metadata, schema) = transform_income_statement_response(response_json)?;
-            Ok(ToolCallResult::DataFrame { data, schema, metadata })
+            Ok(ToolResult::columnar(data, schema, metadata).with_label(Label::new(symbol)))
         }
         "balance_sheet" => {
             let symbol = params
@@ -1055,7 +1040,7 @@ pub async fn call_tool<Client: Request>(client: &AlphaVantage<Client>, request: 
             let response_json: Value =
                 serde_json::from_str(&response).map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))?;
             let (data, metadata, schema) = transform_balance_sheet_response(response_json)?;
-            Ok(ToolCallResult::DataFrame { data, schema, metadata })
+            Ok(ToolResult::columnar(data, schema, metadata).with_label(Label::new(symbol)))
         }
         "cash_flow" => {
             let symbol = params
@@ -1068,7 +1053,7 @@ pub async fn call_tool<Client: Request>(client: &AlphaVantage<Client>, request: 
             let response_json: Value =
                 serde_json::from_str(&response).map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))?;
             let (data, metadata, schema) = transform_cash_flow_response(response_json)?;
-            Ok(ToolCallResult::DataFrame { data, schema, metadata })
+            Ok(ToolResult::columnar(data, schema, metadata).with_label(Label::new(symbol)))
         }
 
         _ => Err(Error::Custom(format!("Unknown tool: {tool}"))),
