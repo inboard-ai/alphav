@@ -45,10 +45,15 @@ pub fn list_tools() -> Vec<ToolInfo> {
                         "enum": ["compact", "full"],
                         "default": "compact",
                         "description": "Compact returns last 100 data points, full returns all"
+                    },
+                    "label": {
+                        "type": "string",
+                        "description": "Human-friendly name for this result (e.g., 'AAPL 5min Intraday')"
                     }
                 },
                 "required": ["symbol", "interval"]
             }),
+            cacheable: true,
         },
         ToolInfo {
             id: "time_series_daily".to_string(),
@@ -65,10 +70,15 @@ pub fn list_tools() -> Vec<ToolInfo> {
                         "type": "string",
                         "enum": ["compact", "full"],
                         "default": "compact"
+                    },
+                    "label": {
+                        "type": "string",
+                        "description": "Human-friendly name for this result (e.g., 'AAPL Daily Prices')"
                     }
                 },
                 "required": ["symbol"]
             }),
+            cacheable: true,
         },
         ToolInfo {
             id: "time_series_weekly".to_string(),
@@ -80,10 +90,15 @@ pub fn list_tools() -> Vec<ToolInfo> {
                     "symbol": {
                         "type": "string",
                         "description": "Stock symbol"
+                    },
+                    "label": {
+                        "type": "string",
+                        "description": "Human-friendly name for this result (e.g., 'AAPL Weekly Prices')"
                     }
                 },
                 "required": ["symbol"]
             }),
+            cacheable: true,
         },
         ToolInfo {
             id: "time_series_monthly".to_string(),
@@ -95,10 +110,15 @@ pub fn list_tools() -> Vec<ToolInfo> {
                     "symbol": {
                         "type": "string",
                         "description": "Stock symbol"
+                    },
+                    "label": {
+                        "type": "string",
+                        "description": "Human-friendly name for this result (e.g., 'AAPL Monthly Prices')"
                     }
                 },
                 "required": ["symbol"]
             }),
+            cacheable: true,
         },
         // Fundamental Data Endpoints
         ToolInfo {
@@ -112,10 +132,15 @@ pub fn list_tools() -> Vec<ToolInfo> {
                     "symbol": {
                         "type": "string",
                         "description": "Stock symbol"
+                    },
+                    "label": {
+                        "type": "string",
+                        "description": "Human-friendly name for this result (e.g., 'AAPL Company Overview')"
                     }
                 },
                 "required": ["symbol"]
             }),
+            cacheable: true,
         },
         ToolInfo {
             id: "earnings".to_string(),
@@ -127,10 +152,15 @@ pub fn list_tools() -> Vec<ToolInfo> {
                     "symbol": {
                         "type": "string",
                         "description": "Stock symbol"
+                    },
+                    "label": {
+                        "type": "string",
+                        "description": "Human-friendly name for this result (e.g., 'AAPL Earnings')"
                     }
                 },
                 "required": ["symbol"]
             }),
+            cacheable: true,
         },
         ToolInfo {
             id: "earnings_estimates".to_string(),
@@ -148,10 +178,15 @@ pub fn list_tools() -> Vec<ToolInfo> {
                         "enum": ["3month", "6month", "12month", "all"],
                         "default": "all",
                         "description": "Time horizon for estimates"
+                    },
+                    "label": {
+                        "type": "string",
+                        "description": "Human-friendly name for this result (e.g., 'AAPL Earnings Estimates')"
                     }
                 },
                 "required": ["symbol"]
             }),
+            cacheable: true,
         },
         ToolInfo {
             id: "income_statement".to_string(),
@@ -163,10 +198,15 @@ pub fn list_tools() -> Vec<ToolInfo> {
                     "symbol": {
                         "type": "string",
                         "description": "Stock symbol"
+                    },
+                    "label": {
+                        "type": "string",
+                        "description": "Human-friendly name for this result (e.g., 'AAPL Income Statement')"
                     }
                 },
                 "required": ["symbol"]
             }),
+            cacheable: true,
         },
         ToolInfo {
             id: "balance_sheet".to_string(),
@@ -178,10 +218,15 @@ pub fn list_tools() -> Vec<ToolInfo> {
                     "symbol": {
                         "type": "string",
                         "description": "Stock symbol"
+                    },
+                    "label": {
+                        "type": "string",
+                        "description": "Human-friendly name for this result (e.g., 'AAPL Balance Sheet')"
                     }
                 },
                 "required": ["symbol"]
             }),
+            cacheable: true,
         },
         ToolInfo {
             id: "cash_flow".to_string(),
@@ -193,10 +238,15 @@ pub fn list_tools() -> Vec<ToolInfo> {
                     "symbol": {
                         "type": "string",
                         "description": "Stock symbol"
+                    },
+                    "label": {
+                        "type": "string",
+                        "description": "Human-friendly name for this result (e.g., 'AAPL Cash Flow')"
                     }
                 },
                 "required": ["symbol"]
             }),
+            cacheable: true,
         },
     ]
 }
@@ -882,6 +932,9 @@ pub async fn call_tool<Client: Request>(client: &AlphaVantage<Client>, request: 
         .get("params")
         .ok_or_else(|| Error::Custom("Missing 'params' field".to_string()))?;
 
+    // Read optional AI-provided label, falling back to symbol
+    let ai_label = params.get("label").and_then(|v| v.as_str());
+
     match tool {
         // Time Series Endpoints
         "time_series_intraday" => {
@@ -919,7 +972,10 @@ pub async fn call_tool<Client: Request>(client: &AlphaVantage<Client>, request: 
             let response_json: Value =
                 serde_json::from_str(&response).map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))?;
             let (data, metadata, schema) = transform_intraday_response(response_json, interval)?;
-            Ok(ToolResult::columnar(data, schema, metadata).with_label(Label::new(symbol)))
+            let label = ai_label.unwrap_or(symbol);
+            Ok(ToolResult::columnar(data, schema, metadata)
+                .with_label(Label::new(label))
+                .with_source(format!("TIME_SERIES_INTRADAY symbol={symbol} interval={interval}")))
         }
         "time_series_daily" => {
             let symbol = params
@@ -942,7 +998,10 @@ pub async fn call_tool<Client: Request>(client: &AlphaVantage<Client>, request: 
             let response_json: Value =
                 serde_json::from_str(&response).map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))?;
             let (data, metadata, schema) = transform_daily_response(response_json)?;
-            Ok(ToolResult::columnar(data, schema, metadata).with_label(Label::new(symbol)))
+            let label = ai_label.unwrap_or(symbol);
+            Ok(ToolResult::columnar(data, schema, metadata)
+                .with_label(Label::new(label))
+                .with_source(format!("TIME_SERIES_DAILY symbol={symbol}")))
         }
         "time_series_weekly" => {
             let symbol = params
@@ -955,7 +1014,10 @@ pub async fn call_tool<Client: Request>(client: &AlphaVantage<Client>, request: 
             let response_json: Value =
                 serde_json::from_str(&response).map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))?;
             let (data, metadata, schema) = transform_weekly_response(response_json)?;
-            Ok(ToolResult::columnar(data, schema, metadata).with_label(Label::new(symbol)))
+            let label = ai_label.unwrap_or(symbol);
+            Ok(ToolResult::columnar(data, schema, metadata)
+                .with_label(Label::new(label))
+                .with_source(format!("TIME_SERIES_WEEKLY symbol={symbol}")))
         }
         "time_series_monthly" => {
             let symbol = params
@@ -968,7 +1030,10 @@ pub async fn call_tool<Client: Request>(client: &AlphaVantage<Client>, request: 
             let response_json: Value =
                 serde_json::from_str(&response).map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))?;
             let (data, metadata, schema) = transform_monthly_response(response_json)?;
-            Ok(ToolResult::columnar(data, schema, metadata).with_label(Label::new(symbol)))
+            let label = ai_label.unwrap_or(symbol);
+            Ok(ToolResult::columnar(data, schema, metadata)
+                .with_label(Label::new(label))
+                .with_source(format!("TIME_SERIES_MONTHLY symbol={symbol}")))
         }
 
         // Fundamental Data Endpoints
@@ -983,7 +1048,10 @@ pub async fn call_tool<Client: Request>(client: &AlphaVantage<Client>, request: 
             let response_json: Value =
                 serde_json::from_str(&response).map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))?;
             let (data, metadata, schema) = transform_company_overview_response(response_json)?;
-            Ok(ToolResult::columnar(data, schema, metadata).with_label(Label::new(symbol)))
+            let label = ai_label.unwrap_or(symbol);
+            Ok(ToolResult::columnar(data, schema, metadata)
+                .with_label(Label::new(label))
+                .with_source(format!("COMPANY_OVERVIEW symbol={symbol}")))
         }
         "earnings" => {
             let symbol = params
@@ -996,7 +1064,10 @@ pub async fn call_tool<Client: Request>(client: &AlphaVantage<Client>, request: 
             let response_json: Value =
                 serde_json::from_str(&response).map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))?;
             let (data, metadata, schema) = transform_earnings_response(response_json)?;
-            Ok(ToolResult::columnar(data, schema, metadata).with_label(Label::new(symbol)))
+            let label = ai_label.unwrap_or(symbol);
+            Ok(ToolResult::columnar(data, schema, metadata)
+                .with_label(Label::new(label))
+                .with_source(format!("EARNINGS symbol={symbol}")))
         }
         "earnings_estimates" => {
             let symbol = params
@@ -1014,7 +1085,10 @@ pub async fn call_tool<Client: Request>(client: &AlphaVantage<Client>, request: 
             let response_json: Value =
                 serde_json::from_str(&response).map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))?;
             let (data, metadata, schema) = transform_earnings_estimates_response(response_json)?;
-            Ok(ToolResult::columnar(data, schema, metadata).with_label(Label::new(symbol)))
+            let label = ai_label.unwrap_or(symbol);
+            Ok(ToolResult::columnar(data, schema, metadata)
+                .with_label(Label::new(label))
+                .with_source(format!("EARNINGS_ESTIMATES symbol={symbol}")))
         }
         "income_statement" => {
             let symbol = params
@@ -1027,7 +1101,10 @@ pub async fn call_tool<Client: Request>(client: &AlphaVantage<Client>, request: 
             let response_json: Value =
                 serde_json::from_str(&response).map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))?;
             let (data, metadata, schema) = transform_income_statement_response(response_json)?;
-            Ok(ToolResult::columnar(data, schema, metadata).with_label(Label::new(symbol)))
+            let label = ai_label.unwrap_or(symbol);
+            Ok(ToolResult::columnar(data, schema, metadata)
+                .with_label(Label::new(label))
+                .with_source(format!("INCOME_STATEMENT symbol={symbol}")))
         }
         "balance_sheet" => {
             let symbol = params
@@ -1040,7 +1117,10 @@ pub async fn call_tool<Client: Request>(client: &AlphaVantage<Client>, request: 
             let response_json: Value =
                 serde_json::from_str(&response).map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))?;
             let (data, metadata, schema) = transform_balance_sheet_response(response_json)?;
-            Ok(ToolResult::columnar(data, schema, metadata).with_label(Label::new(symbol)))
+            let label = ai_label.unwrap_or(symbol);
+            Ok(ToolResult::columnar(data, schema, metadata)
+                .with_label(Label::new(label))
+                .with_source(format!("BALANCE_SHEET symbol={symbol}")))
         }
         "cash_flow" => {
             let symbol = params
@@ -1053,7 +1133,10 @@ pub async fn call_tool<Client: Request>(client: &AlphaVantage<Client>, request: 
             let response_json: Value =
                 serde_json::from_str(&response).map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))?;
             let (data, metadata, schema) = transform_cash_flow_response(response_json)?;
-            Ok(ToolResult::columnar(data, schema, metadata).with_label(Label::new(symbol)))
+            let label = ai_label.unwrap_or(symbol);
+            Ok(ToolResult::columnar(data, schema, metadata)
+                .with_label(Label::new(label))
+                .with_source(format!("CASH_FLOW symbol={symbol}")))
         }
 
         _ => Err(Error::Custom(format!("Unknown tool: {tool}"))),
