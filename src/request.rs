@@ -7,7 +7,10 @@ use std::future::Future;
 
 pub mod common;
 pub mod fundamentals;
+pub mod realtime_bulk_quotes;
 pub mod time_series;
+
+pub use realtime_bulk_quotes::RealtimeBulkQuotes;
 
 /// Trait for HTTP clients that can make requests to the Alpha Vantage API.
 ///
