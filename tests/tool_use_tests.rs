@@ -27,6 +27,7 @@ fn expect_df(result: ToolResult) -> DataFrame {
     match result {
         ToolResult::DataFrame(df) => df,
         ToolResult::Text(t) => panic!("expected DataFrame, got Text: {}", t.content),
+        other => panic!("expected DataFrame, got unknown ToolResult variant: {other:?}"),
     }
 }
 

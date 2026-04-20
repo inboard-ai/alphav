@@ -23,6 +23,7 @@ async fn check_endpoint(
     let df = match result {
         ToolResult::DataFrame(df) => df,
         ToolResult::Text(t) => return Err(format!("Expected DataFrame for {tool_name}, got Text: {}", t.content).into()),
+        other => return Err(format!("Expected DataFrame for {tool_name}, got unknown variant: {other:?}").into()),
     };
 
     assert!(!df.schema.is_empty(), "Schema should not be empty for {tool_name}");

@@ -1,7 +1,6 @@
 //! Comprehensive test of all tool_use endpoints
 use alphav::AlphaVantage;
-use alphav::tool_use::{ToolCallResult, call_tool, list_tools};
-use emporium_core::ToolResult;
+use alphav::tool_use::{ToolResult, call_tool, list_tools};
 use serde_json::json;
 use std::collections::HashMap;
 
@@ -143,69 +142,61 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("   Request: {}", serde_json::to_string_pretty(&request)?);
 
         match call_tool(&client, request).await {
-            Ok(ToolCallResult::DataFrame { data, schema, metadata }) => {
+            Ok(ToolResult::DataFrame(df_out)) => {
                 println!("   ✅ Success!");
 
-                // Print schema information
-                if !schema.is_empty() {
-                    println!("   📋 Schema ({} columns):", schema.len());
-                    for col in &schema {
+                if !df_out.schema.is_empty() {
+                    println!("   📋 Schema ({} columns):", df_out.schema.len());
+                    for col in &df_out.schema {
                         println!("     - {} as {} ({})", col.name, col.alias, col.dtype);
                     }
                 } else {
                     println!("   📋 Schema: Empty (raw JSON response)");
                 }
 
-                // Print metadata if available
-                if let Some(meta) = &metadata {
+                if let Some(meta) = &df_out.metadata {
                     println!("   📝 Metadata: {}", serde_json::to_string_pretty(meta)?);
                 }
 
-                // Convert to emporium DataFrame
-                let emp = emporium_core::ToolResult::columnar(data.clone(), schema.clone(), metadata.clone());
-                match emp {
-                    ToolResult::DataFrame(proto) => {
-                        match proto.to_dataframe() {
-                            Ok(df) => {
-                                println!("   📊 DataFrame conversion: ✅ Success");
-                                println!("   📏 DataFrame shape: {} rows × {} columns", df.height(), df.width());
+                let data = df_out.data.clone();
+                let schema_was_empty = df_out.schema.is_empty();
+                match df_out.to_dataframe() {
+                    Ok(df) => {
+                        println!("   📊 DataFrame conversion: ✅ Success");
+                        println!("   📏 DataFrame shape: {} rows × {} columns", df.height(), df.width());
 
-                                // Show first few rows for time series data (if it's an array)
-                                if data.is_array() && !schema.is_empty() {
-                                    println!("   🔍 Sample data (first 3 rows):");
-                                    println!("{}", df.head(Some(3)));
-                                } else {
-                                    // For fundamental data, just show the structure
-                                    println!("   🔍 Data type: Raw JSON object");
-                                    if let Some(obj) = data.as_object() {
-                                        println!(
-                                            "   📊 Top-level keys: {}",
-                                            obj.keys().take(10).cloned().collect::<Vec<_>>().join(", ")
-                                        );
-                                    }
-                                }
-
-                                results.insert(test_name.to_string(), "✅ Success".to_string());
-                                successful += 1;
-                            }
-                            Err(e) => {
-                                println!("   ❌ DataFrame conversion failed: {}", e);
-                                results.insert(test_name.to_string(), format!("❌ DataFrame error: {}", e));
-                                failed += 1;
+                        if data.is_array() && !schema_was_empty {
+                            println!("   🔍 Sample data (first 3 rows):");
+                            println!("{}", df.head(Some(3)));
+                        } else {
+                            println!("   🔍 Data type: Raw JSON object");
+                            if let Some(obj) = data.as_object() {
+                                println!(
+                                    "   📊 Top-level keys: {}",
+                                    obj.keys().take(10).cloned().collect::<Vec<_>>().join(", ")
+                                );
                             }
                         }
-                    }
-                    ToolResult::Text(text) => {
-                        println!("   📄 Text result: {}", text);
-                        results.insert(test_name.to_string(), "✅ Text result".to_string());
+
+                        results.insert(test_name.to_string(), "✅ Success".to_string());
                         successful += 1;
+                    }
+                    Err(e) => {
+                        println!("   ❌ DataFrame conversion failed: {}", e);
+                        results.insert(test_name.to_string(), format!("❌ DataFrame error: {}", e));
+                        failed += 1;
                     }
                 }
             }
-            Ok(ToolCallResult::Text(text)) => {
-                println!("   📄 Text response: {}", text);
+            Ok(ToolResult::Text(text)) => {
+                println!("   📄 Text response: {}", text.content);
                 results.insert(test_name.to_string(), "✅ Text response".to_string());
                 successful += 1;
+            }
+            Ok(other) => {
+                println!("   ⚠️  Unknown variant: {other:?}");
+                results.insert(test_name.to_string(), "⚠️ Unknown variant".to_string());
+                failed += 1;
             }
             Err(e) => {
                 println!("   ❌ Error: {}", e);

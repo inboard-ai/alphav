@@ -47,6 +47,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Ok(ToolResult::Text(text)) => {
                 println!("Success! Response: {}", text.content);
             }
+            Ok(other) => println!("Unknown ToolResult variant: {other:?}"),
             Err(e) => println!("Error calling tool: {}", e),
         }
     } else {

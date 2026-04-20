@@ -11,9 +11,19 @@ use crate::request::common::{Interval, OutputSize};
 use crate::rest;
 use crate::rest::fundamentals;
 
-// Always use emporium-core types
-pub use emporium_core::tool::{Label, ToolResult};
-pub use emporium_core::{Activity, ColumnDef, Schema, ToolInfo};
+// Emporium-core underwent a "typed WIT provider" refactor that moved domain
+// types into submodules and renamed a few. Alias them back to the names alphav
+// has historically exposed, so downstream consumers (notably xt-alphav) keep
+// compiling through the emporium bump without churn.
+pub use emporium_core::column::Def as ColumnDef;
+pub use emporium_core::tool::Info as ToolInfo;
+pub use emporium_core::tool::Output as ToolResult;
+pub use emporium_core::tool::{Activity, Label};
+
+/// List of column definitions for a tabular tool result. Previously
+/// re-exported by emporium-core as a type alias; inlined here for the same
+/// ergonomic use.
+pub type Schema = Vec<ColumnDef>;
 
 /// Get details for a specific tool
 pub fn get_tool_details(tool_id: &str) -> Option<ToolInfo> {
@@ -59,6 +69,7 @@ pub fn list_tools() -> Vec<ToolInfo> {
                 past: "Fetched intraday series".to_string(),
                 subject_field: "/symbol".to_string(),
             }),
+            examples: vec![],
         },
         ToolInfo {
             id: "time_series_daily".to_string(),
@@ -89,6 +100,7 @@ pub fn list_tools() -> Vec<ToolInfo> {
                 past: "Fetched daily series".to_string(),
                 subject_field: "/symbol".to_string(),
             }),
+            examples: vec![],
         },
         ToolInfo {
             id: "time_series_weekly".to_string(),
@@ -114,6 +126,7 @@ pub fn list_tools() -> Vec<ToolInfo> {
                 past: "Fetched weekly series".to_string(),
                 subject_field: "/symbol".to_string(),
             }),
+            examples: vec![],
         },
         ToolInfo {
             id: "time_series_monthly".to_string(),
@@ -139,6 +152,7 @@ pub fn list_tools() -> Vec<ToolInfo> {
                 past: "Fetched monthly series".to_string(),
                 subject_field: "/symbol".to_string(),
             }),
+            examples: vec![],
         },
         // Fundamental Data Endpoints
         ToolInfo {
@@ -166,6 +180,7 @@ pub fn list_tools() -> Vec<ToolInfo> {
                 past: "Fetched overview".to_string(),
                 subject_field: "/symbol".to_string(),
             }),
+            examples: vec![],
         },
         ToolInfo {
             id: "earnings".to_string(),
@@ -191,6 +206,7 @@ pub fn list_tools() -> Vec<ToolInfo> {
                 past: "Fetched earnings".to_string(),
                 subject_field: "/symbol".to_string(),
             }),
+            examples: vec![],
         },
         ToolInfo {
             id: "earnings_estimates".to_string(),
@@ -222,6 +238,7 @@ pub fn list_tools() -> Vec<ToolInfo> {
                 past: "Fetched estimates".to_string(),
                 subject_field: "/symbol".to_string(),
             }),
+            examples: vec![],
         },
         ToolInfo {
             id: "income_statement".to_string(),
@@ -247,6 +264,7 @@ pub fn list_tools() -> Vec<ToolInfo> {
                 past: "Fetched income statement".to_string(),
                 subject_field: "/symbol".to_string(),
             }),
+            examples: vec![],
         },
         ToolInfo {
             id: "balance_sheet".to_string(),
@@ -272,6 +290,7 @@ pub fn list_tools() -> Vec<ToolInfo> {
                 past: "Fetched balance sheet".to_string(),
                 subject_field: "/symbol".to_string(),
             }),
+            examples: vec![],
         },
         ToolInfo {
             id: "cash_flow".to_string(),
@@ -297,6 +316,7 @@ pub fn list_tools() -> Vec<ToolInfo> {
                 past: "Fetched cash flow".to_string(),
                 subject_field: "/symbol".to_string(),
             }),
+            examples: vec![],
         },
     ]
 }
