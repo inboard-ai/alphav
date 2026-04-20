@@ -1,13 +1,15 @@
 //! Tests for the tool_use module
 //!
-//! These tests verify that each tool can be called successfully and returns valid JSON.
-//! They require a valid ALPHAVANTAGE_API_KEY to be set in the environment.
+//! These tests verify that each tool can be called successfully and returns a
+//! `ToolResult::DataFrame` whose schema and data match the transformed shape
+//! produced by the module. They require a valid `ALPHAVANTAGE_API_KEY` and are
+//! marked `#[ignore]` to avoid burning API quota.
 
 use alphav::AlphaVantage;
-use alphav::tool_use::{ToolCallResult, call_tool, get_tool_details, list_tools};
-use serde_json::json;
+use alphav::tool_use::{ToolResult, call_tool, get_tool_details, list_tools};
+use emporium_core::tool::DataFrame;
+use serde_json::{Value, json};
 
-/// Helper to setup client
 #[cfg(feature = "dotenvy")]
 fn setup_client() -> AlphaVantage {
     AlphaVantage::new().expect("Failed to create client. Make sure ALPHAVANTAGE_API_KEY is set")
@@ -19,37 +21,51 @@ fn setup_client() -> AlphaVantage {
     AlphaVantage::default().with_key(api_key)
 }
 
+/// Pattern-unwrap a successful `ToolResult` into the inner `DataFrame` (panicking
+/// with the `Text` body if the tool returned text instead).
+fn expect_df(result: ToolResult) -> DataFrame {
+    match result {
+        ToolResult::DataFrame(df) => df,
+        ToolResult::Text(t) => panic!("expected DataFrame, got Text: {}", t.content),
+    }
+}
+
+fn expect_rows(df: &DataFrame) -> &[Value] {
+    df.data
+        .as_array()
+        .expect("DataFrame.data should be a JSON array of rows")
+}
+
 #[tokio::test]
-#[ignore] // Run with: cargo test -- --ignored --test-threads=1
+#[ignore]
 async fn test_list_tools() {
     let tools = list_tools();
     assert_eq!(tools.len(), 10, "Expected 10 tools");
 
-    // Verify all expected tools are present
-    let tool_ids: Vec<String> = tools.iter().map(|t| t.id.clone()).collect();
-    assert!(tool_ids.contains(&"time_series_intraday".to_string()));
-    assert!(tool_ids.contains(&"time_series_daily".to_string()));
-    assert!(tool_ids.contains(&"time_series_weekly".to_string()));
-    assert!(tool_ids.contains(&"time_series_monthly".to_string()));
-    assert!(tool_ids.contains(&"company_overview".to_string()));
-    assert!(tool_ids.contains(&"earnings".to_string()));
-    assert!(tool_ids.contains(&"earnings_estimates".to_string()));
-    assert!(tool_ids.contains(&"income_statement".to_string()));
-    assert!(tool_ids.contains(&"balance_sheet".to_string()));
-    assert!(tool_ids.contains(&"cash_flow".to_string()));
+    let tool_ids: Vec<&str> = tools.iter().map(|t| t.id.as_str()).collect();
+    for expected in [
+        "time_series_intraday",
+        "time_series_daily",
+        "time_series_weekly",
+        "time_series_monthly",
+        "company_overview",
+        "earnings",
+        "earnings_estimates",
+        "income_statement",
+        "balance_sheet",
+        "cash_flow",
+    ] {
+        assert!(tool_ids.contains(&expected), "missing tool: {expected}");
+    }
 }
 
 #[tokio::test]
 #[ignore]
 async fn test_get_tool_details() {
-    // Test valid tool
-    let tool = get_tool_details("time_series_daily");
-    assert!(tool.is_some());
-    assert_eq!(tool.unwrap().id, "time_series_daily");
+    let tool = get_tool_details("time_series_daily").expect("time_series_daily should exist");
+    assert_eq!(tool.id, "time_series_daily");
 
-    // Test invalid tool
-    let tool = get_tool_details("invalid_tool");
-    assert!(tool.is_none());
+    assert!(get_tool_details("invalid_tool").is_none());
 }
 
 #[tokio::test]
@@ -65,55 +81,27 @@ async fn test_time_series_intraday() {
         }
     });
 
-    let result = call_tool(&client, request).await;
-    assert!(
-        result.is_ok(),
-        "Failed to call time_series_intraday: {:?}",
-        result.err()
-    );
+    let df = expect_df(call_tool(&client, request).await.expect("call_tool should succeed"));
 
-    let ToolCallResult::DataFrame { data: response, .. } = result.unwrap() else {
-        panic!("Expected DataFrame result");
-    };
-
-    // Verify metadata structure
-    let metadata = response.get("Meta Data").expect("Response should have Meta Data");
-    assert_eq!(
-        metadata.get("1. Information").and_then(|v| v.as_str()),
-        Some("Intraday (5min) open, high, low, close prices and volume")
-    );
+    // Metadata preserves the raw Alpha Vantage "Meta Data" block.
+    let metadata = df.metadata.as_ref().expect("intraday response should carry metadata");
     assert_eq!(metadata.get("2. Symbol").and_then(|v| v.as_str()), Some("AAPL"));
-    assert!(metadata.get("3. Last Refreshed").is_some());
     assert_eq!(metadata.get("4. Interval").and_then(|v| v.as_str()), Some("5min"));
-    assert_eq!(metadata.get("5. Output Size").and_then(|v| v.as_str()), Some("Compact"));
 
-    // Verify time series data
-    let time_series = response
-        .get("Time Series (5min)")
-        .expect("Response should have Time Series (5min)")
-        .as_object()
-        .expect("Time series should be an object");
+    // Schema should describe the six transformed columns.
+    let col_names: Vec<&str> = df.schema.iter().map(|c| c.name.as_str()).collect();
+    for expected in ["timestamp", "open", "high", "low", "close", "volume"] {
+        assert!(col_names.contains(&expected), "schema missing column {expected}");
+    }
 
-    assert!(!time_series.is_empty(), "Time series should contain data");
+    let rows = expect_rows(&df);
+    assert!(!rows.is_empty(), "intraday should return at least one row");
 
-    // Check structure of first data point
-    let (timestamp, data) = time_series.iter().next().unwrap();
-    // Verify timestamp format (should be like "2025-10-29 16:00:00")
-    assert!(
-        timestamp.contains(' ') && timestamp.len() >= 19,
-        "Timestamp should be datetime format: {}",
-        timestamp
-    );
-
-    assert!(data.get("1. open").and_then(|v| v.as_str()).is_some());
-    assert!(data.get("2. high").and_then(|v| v.as_str()).is_some());
-    assert!(data.get("3. low").and_then(|v| v.as_str()).is_some());
-    assert!(data.get("4. close").and_then(|v| v.as_str()).is_some());
-    assert!(data.get("5. volume").and_then(|v| v.as_str()).is_some());
-
-    // Verify values are numeric strings
-    let open = data.get("1. open").and_then(|v| v.as_str()).unwrap();
-    open.parse::<f64>().expect("Open should be a valid number");
+    let first = &rows[0];
+    let ts = first.get("timestamp").and_then(|v| v.as_str()).expect("timestamp");
+    assert!(ts.len() >= 19 && ts.contains(' '), "unexpected timestamp format: {ts}");
+    let open = first.get("open").and_then(|v| v.as_str()).expect("open");
+    open.parse::<f64>().expect("open should be numeric");
 }
 
 #[tokio::test]
@@ -122,86 +110,40 @@ async fn test_time_series_daily() {
     let client = setup_client();
     let request = json!({
         "tool": "time_series_daily",
-        "params": {
-            "symbol": "MSFT",
-            "outputsize": "compact"
-        }
+        "params": { "symbol": "MSFT", "outputsize": "compact" }
     });
 
-    let result = call_tool(&client, request).await;
-    assert!(result.is_ok(), "Failed to call time_series_daily: {:?}", result.err());
+    let df = expect_df(call_tool(&client, request).await.expect("call_tool should succeed"));
 
-    let ToolCallResult::DataFrame { data: response, .. } = result.unwrap() else {
-        panic!("Expected DataFrame result");
-    };
-
-    // Verify metadata
-    let metadata = response.get("Meta Data").expect("Response should have Meta Data");
+    let metadata = df.metadata.as_ref().expect("daily response should carry metadata");
     assert_eq!(metadata.get("2. Symbol").and_then(|v| v.as_str()), Some("MSFT"));
-    assert_eq!(metadata.get("4. Output Size").and_then(|v| v.as_str()), Some("Compact"));
 
-    // Verify time series data
-    let time_series = response
-        .get("Time Series (Daily)")
-        .expect("Response should have Time Series (Daily)")
-        .as_object()
-        .expect("Time series should be an object");
-
-    // Compact should have ~100 data points
+    let rows = expect_rows(&df);
     assert!(
-        time_series.len() > 50 && time_series.len() <= 100,
-        "Compact output should have ~100 data points, got {}",
-        time_series.len()
+        rows.len() > 50 && rows.len() <= 100,
+        "compact daily should have ~100 rows, got {}",
+        rows.len()
     );
 
-    // Verify date format and data structure
-    for (date, data) in time_series.iter().take(5) {
-        // Date should be YYYY-MM-DD format
+    for row in rows.iter().take(5) {
+        let date = row.get("date").and_then(|v| v.as_str()).expect("date");
         assert!(
             date.len() == 10 && date.chars().nth(4) == Some('-'),
-            "Date should be in YYYY-MM-DD format: {}",
-            date
+            "date should be YYYY-MM-DD: {date}"
         );
+        let open: f64 = row.get("open").and_then(|v| v.as_str()).unwrap().parse().unwrap();
+        let high: f64 = row.get("high").and_then(|v| v.as_str()).unwrap().parse().unwrap();
+        let low: f64 = row.get("low").and_then(|v| v.as_str()).unwrap().parse().unwrap();
+        let close: f64 = row.get("close").and_then(|v| v.as_str()).unwrap().parse().unwrap();
+        row.get("volume")
+            .and_then(|v| v.as_str())
+            .unwrap()
+            .parse::<u64>()
+            .expect("volume numeric");
 
-        // All required fields present and numeric
-        let open = data
-            .get("1. open")
-            .and_then(|v| v.as_str())
-            .expect("Should have open price");
-        let high = data
-            .get("2. high")
-            .and_then(|v| v.as_str())
-            .expect("Should have high price");
-        let low = data
-            .get("3. low")
-            .and_then(|v| v.as_str())
-            .expect("Should have low price");
-        let close = data
-            .get("4. close")
-            .and_then(|v| v.as_str())
-            .expect("Should have close price");
-        let volume = data
-            .get("5. volume")
-            .and_then(|v| v.as_str())
-            .expect("Should have volume");
-
-        // Parse to verify they're valid numbers
-        let open_val = open.parse::<f64>().expect("Open should be numeric");
-        let high_val = high.parse::<f64>().expect("High should be numeric");
-        let low_val = low.parse::<f64>().expect("Low should be numeric");
-        let close_val = close.parse::<f64>().expect("Close should be numeric");
-        volume.parse::<u64>().expect("Volume should be numeric");
-
-        // Sanity checks
-        assert!(high_val >= low_val, "High should be >= low");
-        assert!(
-            open_val >= low_val && open_val <= high_val,
-            "Open should be between low and high"
-        );
-        assert!(
-            close_val >= low_val && close_val <= high_val,
-            "Close should be between low and high"
-        );
+        assert!(high >= low, "high should be >= low");
+        assert!(open >= low && open <= high, "open within [low, high]");
+        assert!(close >= low && close <= high, "close within [low, high]");
     }
 }
 
@@ -211,19 +153,18 @@ async fn test_time_series_weekly() {
     let client = setup_client();
     let request = json!({
         "tool": "time_series_weekly",
-        "params": {
-            "symbol": "GOOGL"
-        }
+        "params": { "symbol": "GOOGL" }
     });
 
-    let result = call_tool(&client, request).await;
-    assert!(result.is_ok(), "Failed to call time_series_weekly: {:?}", result.err());
-
-    let ToolCallResult::DataFrame { data: response, .. } = result.unwrap() else {
-        panic!("Expected DataFrame result");
-    };
-    assert!(response.get("Meta Data").is_some());
-    assert!(response.get("Weekly Time Series").is_some());
+    let df = expect_df(call_tool(&client, request).await.expect("call_tool should succeed"));
+    assert!(df.metadata.is_some(), "weekly response should carry metadata");
+    assert!(!expect_rows(&df).is_empty(), "weekly should return at least one row");
+    assert!(
+        df.schema
+            .iter()
+            .any(|c| c.name == "week_ending"),
+        "weekly schema should include week_ending column"
+    );
 }
 
 #[tokio::test]
@@ -232,19 +173,13 @@ async fn test_time_series_monthly() {
     let client = setup_client();
     let request = json!({
         "tool": "time_series_monthly",
-        "params": {
-            "symbol": "AMZN"
-        }
+        "params": { "symbol": "AMZN" }
     });
 
-    let result = call_tool(&client, request).await;
-    assert!(result.is_ok(), "Failed to call time_series_monthly: {:?}", result.err());
-
-    let ToolCallResult::DataFrame { data: response, .. } = result.unwrap() else {
-        panic!("Expected DataFrame result");
-    };
-    assert!(response.get("Meta Data").is_some());
-    assert!(response.get("Monthly Time Series").is_some());
+    let df = expect_df(call_tool(&client, request).await.expect("call_tool should succeed"));
+    assert!(df.metadata.is_some());
+    assert!(!expect_rows(&df).is_empty());
+    assert!(df.schema.iter().any(|c| c.name == "month"));
 }
 
 #[tokio::test]
@@ -253,44 +188,39 @@ async fn test_company_overview() {
     let client = setup_client();
     let request = json!({
         "tool": "company_overview",
-        "params": {
-            "symbol": "AAPL"
-        }
+        "params": { "symbol": "AAPL" }
     });
 
-    let result = call_tool(&client, request).await;
-    assert!(result.is_ok(), "Failed to call company_overview: {:?}", result.err());
+    let df = expect_df(call_tool(&client, request).await.expect("call_tool should succeed"));
+    let rows = expect_rows(&df);
+    assert_eq!(rows.len(), 1, "overview should be a single-row table");
 
-    let ToolCallResult::DataFrame { data: response, .. } = result.unwrap() else {
-        panic!("Expected DataFrame result");
-    };
+    let row = &rows[0];
+    assert_eq!(row.get("Symbol").and_then(|v| v.as_str()), Some("AAPL"));
+    assert!(
+        row.get("Name")
+            .and_then(|v| v.as_str())
+            .map(|s| s.contains("Apple"))
+            .unwrap_or(false),
+        "Name should mention Apple"
+    );
+    assert_eq!(row.get("Exchange").and_then(|v| v.as_str()), Some("NASDAQ"));
 
-    // Verify key company information
-    assert_eq!(response.get("Symbol").and_then(|v| v.as_str()), Some("AAPL"));
-    assert_eq!(response.get("Name").and_then(|v| v.as_str()), Some("Apple Inc"));
-    assert_eq!(response.get("Exchange").and_then(|v| v.as_str()), Some("NASDAQ"));
-
-    // Verify numeric fields exist and are parseable
-    let market_cap = response
+    let market_cap = row
         .get("MarketCapitalization")
         .and_then(|v| v.as_str())
-        .expect("Should have MarketCapitalization");
-    market_cap.parse::<u64>().expect("Market cap should be numeric");
+        .expect("MarketCapitalization");
+    market_cap.parse::<u64>().expect("market cap numeric");
 
-    // Verify key financial metrics exist
-    assert!(response.get("PERatio").is_some(), "Should have PE ratio");
-    assert!(response.get("DividendYield").is_some(), "Should have dividend yield");
-    assert!(response.get("52WeekHigh").is_some(), "Should have 52 week high");
-    assert!(response.get("52WeekLow").is_some(), "Should have 52 week low");
-
-    // Verify company description exists
-    let description = response
-        .get("Description")
-        .and_then(|v| v.as_str())
-        .expect("Should have company description");
+    assert!(row.get("PERatio").is_some());
+    assert!(row.get("DividendYield").is_some());
+    assert!(row.get("52WeekHigh").is_some());
+    assert!(row.get("52WeekLow").is_some());
     assert!(
-        description.contains("Apple") || description.contains("iPhone"),
-        "Description should mention Apple or its products"
+        row.get("Description")
+            .and_then(|v| v.as_str())
+            .map(|d| d.contains("Apple") || d.contains("iPhone"))
+            .unwrap_or(false)
     );
 }
 
@@ -300,19 +230,21 @@ async fn test_earnings() {
     let client = setup_client();
     let request = json!({
         "tool": "earnings",
-        "params": {
-            "symbol": "TSLA"
-        }
+        "params": { "symbol": "TSLA" }
     });
 
-    let result = call_tool(&client, request).await;
-    assert!(result.is_ok(), "Failed to call earnings: {:?}", result.err());
-
-    let ToolCallResult::DataFrame { data: response, .. } = result.unwrap() else {
-        panic!("Expected DataFrame result");
-    };
-    // Earnings typically has quarterlyEarnings and annualEarnings
-    assert!(response.get("symbol").is_some() || response.get("quarterlyEarnings").is_some());
+    let df = expect_df(call_tool(&client, request).await.expect("call_tool should succeed"));
+    assert_eq!(
+        df.metadata
+            .as_ref()
+            .and_then(|m| m.get("symbol"))
+            .and_then(|v| v.as_str()),
+        Some("TSLA")
+    );
+    let rows = expect_rows(&df);
+    assert!(!rows.is_empty(), "earnings should return rows");
+    assert!(rows[0].get("period_type").is_some());
+    assert!(rows[0].get("fiscal_date_ending").is_some());
 }
 
 #[tokio::test]
@@ -321,20 +253,13 @@ async fn test_earnings_estimates() {
     let client = setup_client();
     let request = json!({
         "tool": "earnings_estimates",
-        "params": {
-            "symbol": "META",
-            "horizon": "3month"
-        }
+        "params": { "symbol": "META", "horizon": "3month" }
     });
 
-    let result = call_tool(&client, request).await;
-    assert!(result.is_ok(), "Failed to call earnings_estimates: {:?}", result.err());
-
-    let ToolCallResult::DataFrame { data: response, .. } = result.unwrap() else {
-        panic!("Expected DataFrame result");
-    };
-    // Check for typical earnings estimates response structure
-    assert!(response.is_object(), "Expected object response");
+    let df = expect_df(call_tool(&client, request).await.expect("call_tool should succeed"));
+    assert!(df.schema.iter().any(|c| c.name == "date"));
+    assert!(df.schema.iter().any(|c| c.name == "horizon"));
+    assert!(df.schema.iter().any(|c| c.name == "eps_estimate_average"));
 }
 
 #[tokio::test]
@@ -343,52 +268,40 @@ async fn test_income_statement() {
     let client = setup_client();
     let request = json!({
         "tool": "income_statement",
-        "params": {
-            "symbol": "NVDA"
-        }
+        "params": { "symbol": "NVDA" }
     });
 
-    let result = call_tool(&client, request).await;
-    assert!(result.is_ok(), "Failed to call income_statement: {:?}", result.err());
-
-    let ToolCallResult::DataFrame { data: response, .. } = result.unwrap() else {
-        panic!("Expected DataFrame result");
-    };
-
-    // Verify symbol
-    assert_eq!(response.get("symbol").and_then(|v| v.as_str()), Some("NVDA"));
-
-    // Verify annual reports exist and have data
-    let annual_reports = response
-        .get("annualReports")
-        .and_then(|v| v.as_array())
-        .expect("Should have annualReports array");
-    assert!(!annual_reports.is_empty(), "Should have annual report data");
-
-    // Check first annual report structure
-    let first_report = &annual_reports[0];
-    assert!(first_report.get("fiscalDateEnding").is_some());
-
-    // Verify key income statement items
-    let revenue = first_report
-        .get("totalRevenue")
-        .and_then(|v| v.as_str())
-        .expect("Should have totalRevenue");
-    revenue.parse::<i64>().expect("Revenue should be numeric");
-
-    assert!(first_report.get("grossProfit").is_some(), "Should have gross profit");
-    assert!(
-        first_report.get("operatingIncome").is_some(),
-        "Should have operating income"
+    let df = expect_df(call_tool(&client, request).await.expect("call_tool should succeed"));
+    assert_eq!(
+        df.metadata
+            .as_ref()
+            .and_then(|m| m.get("symbol"))
+            .and_then(|v| v.as_str()),
+        Some("NVDA")
     );
-    assert!(first_report.get("netIncome").is_some(), "Should have net income");
 
-    // Verify quarterly reports also exist
-    let quarterly_reports = response
-        .get("quarterlyReports")
-        .and_then(|v| v.as_array())
-        .expect("Should have quarterlyReports array");
-    assert!(quarterly_reports.len() >= 4, "Should have at least 4 quarters of data");
+    let rows = expect_rows(&df);
+    assert!(!rows.is_empty());
+    let first = &rows[0];
+    assert!(first.get("fiscal_date_ending").is_some());
+    let revenue = first
+        .get("total_revenue")
+        .and_then(|v| v.as_str())
+        .expect("total_revenue");
+    revenue.parse::<i64>().expect("revenue numeric");
+    assert!(first.get("gross_profit").is_some());
+    assert!(first.get("operating_income").is_some());
+    assert!(first.get("net_income").is_some());
+
+    // Should include annual AND quarterly rows (at least ~4 quarterly expected).
+    let quarterly_count = rows
+        .iter()
+        .filter(|r| r.get("period_type").and_then(|v| v.as_str()) == Some("quarterly"))
+        .count();
+    assert!(
+        quarterly_count >= 4,
+        "expected at least 4 quarterly rows, got {quarterly_count}"
+    );
 }
 
 #[tokio::test]
@@ -397,63 +310,27 @@ async fn test_balance_sheet() {
     let client = setup_client();
     let request = json!({
         "tool": "balance_sheet",
-        "params": {
-            "symbol": "JPM"
-        }
+        "params": { "symbol": "JPM" }
     });
 
-    let result = call_tool(&client, request).await;
-    assert!(result.is_ok(), "Failed to call balance_sheet: {:?}", result.err());
-
-    let ToolCallResult::DataFrame { data: response, .. } = result.unwrap() else {
-        panic!("Expected DataFrame result");
-    };
-
-    // Verify symbol
-    assert_eq!(response.get("symbol").and_then(|v| v.as_str()), Some("JPM"));
-
-    // Verify annual reports
-    let annual_reports = response
-        .get("annualReports")
-        .and_then(|v| v.as_array())
-        .expect("Should have annualReports array");
-    assert!(!annual_reports.is_empty(), "Should have annual report data");
-
-    // Check balance sheet items in first report
-    let first_report = &annual_reports[0];
-    assert!(
-        first_report.get("fiscalDateEnding").is_some(),
-        "Should have fiscal date"
+    let df = expect_df(call_tool(&client, request).await.expect("call_tool should succeed"));
+    assert_eq!(
+        df.metadata
+            .as_ref()
+            .and_then(|m| m.get("symbol"))
+            .and_then(|v| v.as_str()),
+        Some("JPM")
     );
-
-    // Key balance sheet items based on actual API response
-    assert!(first_report.get("totalAssets").is_some(), "Should have total assets");
-    assert!(
-        first_report.get("totalLiabilities").is_some(),
-        "Should have total liabilities"
-    );
-    assert!(
-        first_report.get("totalShareholderEquity").is_some(),
-        "Should have shareholder equity"
-    );
-    assert!(
-        first_report.get("cashAndCashEquivalentsAtCarryingValue").is_some(),
-        "Should have cash"
-    );
-    assert!(
-        first_report.get("currentNetReceivables").is_some(),
-        "Should have receivables"
-    );
-    assert!(
-        first_report.get("currentAccountsPayable").is_some(),
-        "Should have payables"
-    );
-    assert!(first_report.get("longTermDebt").is_some(), "Should have long term debt");
-    assert!(first_report.get("commonStock").is_some(), "Should have common stock");
-    assert!(
-        first_report.get("retainedEarnings").is_some(),
-        "Should have retained earnings"
-    );
+    let rows = expect_rows(&df);
+    assert!(!rows.is_empty());
+    let first = &rows[0];
+    assert!(first.get("fiscal_date_ending").is_some());
+    assert!(first.get("total_assets").is_some());
+    assert!(first.get("total_liabilities").is_some());
+    assert!(first.get("total_shareholder_equity").is_some());
+    assert!(first.get("cash_and_cash_equivalents").is_some());
+    assert!(first.get("common_stock").is_some());
+    assert!(first.get("retained_earnings").is_some());
 }
 
 #[tokio::test]
@@ -462,83 +339,33 @@ async fn test_cash_flow() {
     let client = setup_client();
     let request = json!({
         "tool": "cash_flow",
-        "params": {
-            "symbol": "NFLX"
-        }
+        "params": { "symbol": "NFLX" }
     });
 
-    let result = call_tool(&client, request).await;
-    assert!(result.is_ok(), "Failed to call cash_flow: {:?}", result.err());
-
-    let ToolCallResult::DataFrame { data: response, .. } = result.unwrap() else {
-        panic!("Expected DataFrame result");
-    };
-
-    // Verify symbol
-    assert_eq!(response.get("symbol").and_then(|v| v.as_str()), Some("NFLX"));
-
-    // Verify annual reports
-    let annual_reports = response
-        .get("annualReports")
-        .and_then(|v| v.as_array())
-        .expect("Should have annualReports array");
-    assert!(!annual_reports.is_empty(), "Should have annual report data");
-
-    // Check cash flow categories in first report
-    let first_report = &annual_reports[0];
-    assert!(
-        first_report.get("fiscalDateEnding").is_some(),
-        "Should have fiscal date"
+    let df = expect_df(call_tool(&client, request).await.expect("call_tool should succeed"));
+    assert_eq!(
+        df.metadata
+            .as_ref()
+            .and_then(|m| m.get("symbol"))
+            .and_then(|v| v.as_str()),
+        Some("NFLX")
     );
-
-    // Operating activities
-    assert!(
-        first_report.get("operatingCashflow").is_some(),
-        "Should have operating cash flow"
-    );
-    assert!(first_report.get("netIncome").is_some(), "Should have net income");
-    assert!(
-        first_report.get("depreciationDepletionAndAmortization").is_some(),
-        "Should have depreciation"
-    );
-
-    // Investing activities
-    assert!(first_report.get("capitalExpenditures").is_some(), "Should have capex");
-    assert!(
-        first_report.get("cashflowFromInvestment").is_some(),
-        "Should have investing cash flow"
-    );
-
-    // Financing activities
-    assert!(
-        first_report.get("cashflowFromFinancing").is_some(),
-        "Should have financing cash flow"
-    );
-    assert!(
-        first_report.get("dividendPayout").is_some(),
-        "Should have dividend info"
-    );
-
-    // Net change in cash (correct field name)
-    assert!(
-        first_report.get("changeInCashAndCashEquivalents").is_some(),
-        "Should have change in cash and equivalents"
-    );
+    let rows = expect_rows(&df);
+    assert!(!rows.is_empty());
+    let first = &rows[0];
+    assert!(first.get("fiscal_date_ending").is_some());
+    assert!(first.get("operating_cashflow").is_some());
+    assert!(first.get("capital_expenditures").is_some());
+    assert!(first.get("cashflow_from_investment").is_some());
+    assert!(first.get("cashflow_from_financing").is_some());
 }
 
 #[tokio::test]
 #[ignore]
 async fn test_invalid_tool() {
     let client = setup_client();
-    let request = json!({
-        "tool": "invalid_tool_name",
-        "params": {
-            "symbol": "AAPL"
-        }
-    });
-
-    let result = call_tool(&client, request).await;
-    assert!(result.is_err(), "Expected error for invalid tool");
+    let request = json!({ "tool": "invalid_tool_name", "params": { "symbol": "AAPL" } });
+    assert!(call_tool(&client, request).await.is_err());
 }
 
 #[tokio::test]
@@ -546,25 +373,17 @@ async fn test_invalid_tool() {
 async fn test_missing_required_params() {
     let client = setup_client();
 
-    // Test missing symbol
-    let request = json!({
-        "tool": "time_series_daily",
-        "params": {}
-    });
+    let request = json!({ "tool": "time_series_daily", "params": {} });
+    assert!(
+        call_tool(&client, request).await.is_err(),
+        "missing symbol should error"
+    );
 
-    let result = call_tool(&client, request).await;
-    assert!(result.is_err(), "Expected error for missing symbol parameter");
-
-    // Test missing interval for intraday
-    let request = json!({
-        "tool": "time_series_intraday",
-        "params": {
-            "symbol": "AAPL"
-        }
-    });
-
-    let result = call_tool(&client, request).await;
-    assert!(result.is_err(), "Expected error for missing interval parameter");
+    let request = json!({ "tool": "time_series_intraday", "params": { "symbol": "AAPL" } });
+    assert!(
+        call_tool(&client, request).await.is_err(),
+        "missing interval should error"
+    );
 }
 
 #[tokio::test]
@@ -573,41 +392,19 @@ async fn test_invalid_interval() {
     let client = setup_client();
     let request = json!({
         "tool": "time_series_intraday",
-        "params": {
-            "symbol": "AAPL",
-            "interval": "2min"  // Invalid interval
-        }
+        "params": { "symbol": "AAPL", "interval": "2min" }
     });
-
-    let result = call_tool(&client, request).await;
-    assert!(result.is_err(), "Expected error for invalid interval");
+    assert!(call_tool(&client, request).await.is_err());
 }
 
-/// Test that optional parameters work correctly
 #[tokio::test]
 #[ignore]
 async fn test_optional_params() {
     let client = setup_client();
 
-    // Test earnings_estimates without horizon (should use default)
-    let request = json!({
-        "tool": "earnings_estimates",
-        "params": {
-            "symbol": "AAPL"
-        }
-    });
+    let request = json!({ "tool": "earnings_estimates", "params": { "symbol": "AAPL" } });
+    assert!(call_tool(&client, request).await.is_ok());
 
-    let result = call_tool(&client, request).await;
-    assert!(result.is_ok(), "Should work without optional horizon parameter");
-
-    // Test time_series_daily without outputsize (should use default)
-    let request = json!({
-        "tool": "time_series_daily",
-        "params": {
-            "symbol": "MSFT"
-        }
-    });
-
-    let result = call_tool(&client, request).await;
-    assert!(result.is_ok(), "Should work without optional outputsize parameter");
+    let request = json!({ "tool": "time_series_daily", "params": { "symbol": "MSFT" } });
+    assert!(call_tool(&client, request).await.is_ok());
 }

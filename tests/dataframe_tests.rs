@@ -1,7 +1,6 @@
 //! DataFrame conversion tests for all Alpha Vantage endpoints
 use alphav::AlphaVantage;
-use alphav::tool_use::{ToolCallResult, call_tool};
-use emporium_core::ToolResult;
+use alphav::tool_use::{ToolResult, call_tool};
 use serde_json::json;
 use std::env;
 
@@ -10,67 +9,49 @@ fn setup() -> Result<AlphaVantage, Box<dyn std::error::Error>> {
     Ok(AlphaVantage::default().with_key(api_key))
 }
 
-async fn test_endpoint_dataframe(
+async fn check_endpoint(
     client: &AlphaVantage,
     tool_name: &str,
     params: serde_json::Value,
     min_rows: usize,
     min_columns: usize,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let request = json!({
-        "tool": tool_name,
-        "params": params
-    });
+    let request = json!({ "tool": tool_name, "params": params });
 
     let result = call_tool(client, request).await?;
 
-    match result {
-        ToolCallResult::DataFrame { data, schema, metadata } => {
-            // Verify schema is not empty
-            assert!(!schema.is_empty(), "Schema should not be empty for {}", tool_name);
-            assert!(
-                schema.len() >= min_columns,
-                "Schema should have at least {} columns for {}, got {}",
-                min_columns,
-                tool_name,
-                schema.len()
-            );
+    let df = match result {
+        ToolResult::DataFrame(df) => df,
+        ToolResult::Text(t) => return Err(format!("Expected DataFrame for {tool_name}, got Text: {}", t.content).into()),
+    };
 
-            // Convert to emporium DataFrame and verify
-            let emp = emporium_core::ToolResult::columnar(data.clone(), schema.clone(), metadata.clone());
-            match emp {
-                ToolResult::DataFrame(proto) => {
-                    let df = proto
-                        .to_dataframe()
-                        .map_err(|e| format!("Failed to convert {} to DataFrame: {}", tool_name, e))?;
+    assert!(!df.schema.is_empty(), "Schema should not be empty for {tool_name}");
+    assert!(
+        df.schema.len() >= min_columns,
+        "Schema should have at least {min_columns} columns for {tool_name}, got {}",
+        df.schema.len()
+    );
 
-                    assert!(
-                        df.height() >= min_rows,
-                        "DataFrame should have at least {} rows for {}, got {}",
-                        min_rows,
-                        tool_name,
-                        df.height()
-                    );
-                    assert!(
-                        df.width() >= min_columns,
-                        "DataFrame should have at least {} columns for {}, got {}",
-                        min_columns,
-                        tool_name,
-                        df.width()
-                    );
+    let polars = df
+        .to_dataframe()
+        .map_err(|e| format!("Failed to convert {tool_name} to DataFrame: {e}"))?;
 
-                    println!("✅ {}: {} rows × {} columns", tool_name, df.height(), df.width());
-                }
-                ToolResult::Text(_) => {
-                    return Err(format!("Expected DataFrame for {}, got Text", tool_name).into());
-                }
-            }
-        }
-        ToolCallResult::Text(_) => {
-            return Err(format!("Expected DataFrame for {}, got Text", tool_name).into());
-        }
-    }
+    assert!(
+        polars.height() >= min_rows,
+        "DataFrame should have at least {min_rows} rows for {tool_name}, got {}",
+        polars.height()
+    );
+    assert!(
+        polars.width() >= min_columns,
+        "DataFrame should have at least {min_columns} columns for {tool_name}, got {}",
+        polars.width()
+    );
 
+    println!(
+        "✅ {tool_name}: {} rows × {} columns",
+        polars.height(),
+        polars.width()
+    );
     Ok(())
 }
 
@@ -79,7 +60,7 @@ async fn test_endpoint_dataframe(
 async fn test_time_series_intraday_dataframe() {
     let client = setup().expect("Failed to initialize client");
 
-    test_endpoint_dataframe(
+    check_endpoint(
         &client,
         "time_series_intraday",
         json!({
@@ -99,7 +80,7 @@ async fn test_time_series_intraday_dataframe() {
 async fn test_time_series_daily_dataframe() {
     let client = setup().expect("Failed to initialize client");
 
-    test_endpoint_dataframe(
+    check_endpoint(
         &client,
         "time_series_daily",
         json!({
@@ -118,12 +99,10 @@ async fn test_time_series_daily_dataframe() {
 async fn test_time_series_weekly_dataframe() {
     let client = setup().expect("Failed to initialize client");
 
-    test_endpoint_dataframe(
+    check_endpoint(
         &client,
         "time_series_weekly",
-        json!({
-            "symbol": "AAPL"
-        }),
+        json!({ "symbol": "AAPL" }),
         100, // At least 100 weeks of data
         6,   // week_ending, open, high, low, close, volume
     )
@@ -136,12 +115,10 @@ async fn test_time_series_weekly_dataframe() {
 async fn test_time_series_monthly_dataframe() {
     let client = setup().expect("Failed to initialize client");
 
-    test_endpoint_dataframe(
+    check_endpoint(
         &client,
         "time_series_monthly",
-        json!({
-            "symbol": "AAPL"
-        }),
+        json!({ "symbol": "AAPL" }),
         50, // At least 50 months of data
         6,  // month, open, high, low, close, volume
     )
@@ -154,12 +131,10 @@ async fn test_time_series_monthly_dataframe() {
 async fn test_company_overview_dataframe() {
     let client = setup().expect("Failed to initialize client");
 
-    test_endpoint_dataframe(
+    check_endpoint(
         &client,
         "company_overview",
-        json!({
-            "symbol": "AAPL"
-        }),
+        json!({ "symbol": "AAPL" }),
         1,  // Single company record
         20, // At least 20 company overview fields
     )
@@ -172,12 +147,10 @@ async fn test_company_overview_dataframe() {
 async fn test_earnings_dataframe() {
     let client = setup().expect("Failed to initialize client");
 
-    test_endpoint_dataframe(
+    check_endpoint(
         &client,
         "earnings",
-        json!({
-            "symbol": "AAPL"
-        }),
+        json!({ "symbol": "AAPL" }),
         10, // At least 10 earnings records (annual + quarterly)
         5,  // period_type, fiscal_date_ending, reported_eps, etc.
     )
@@ -190,12 +163,10 @@ async fn test_earnings_dataframe() {
 async fn test_earnings_estimates_dataframe() {
     let client = setup().expect("Failed to initialize client");
 
-    test_endpoint_dataframe(
+    check_endpoint(
         &client,
         "earnings_estimates",
-        json!({
-            "symbol": "AAPL"
-        }),
+        json!({ "symbol": "AAPL" }),
         5, // At least 5 estimates
         8, // date, horizon, eps estimates, revenue estimates, etc.
     )
@@ -208,7 +179,7 @@ async fn test_earnings_estimates_dataframe() {
 async fn test_earnings_estimates_with_horizon_dataframe() {
     let client = setup().expect("Failed to initialize client");
 
-    test_endpoint_dataframe(
+    check_endpoint(
         &client,
         "earnings_estimates",
         json!({
@@ -227,12 +198,10 @@ async fn test_earnings_estimates_with_horizon_dataframe() {
 async fn test_income_statement_dataframe() {
     let client = setup().expect("Failed to initialize client");
 
-    test_endpoint_dataframe(
+    check_endpoint(
         &client,
         "income_statement",
-        json!({
-            "symbol": "AAPL"
-        }),
+        json!({ "symbol": "AAPL" }),
         20, // At least 20 income statement records (annual + quarterly)
         10, // period_type, fiscal_date_ending, revenue, costs, etc.
     )
@@ -245,12 +214,10 @@ async fn test_income_statement_dataframe() {
 async fn test_balance_sheet_dataframe() {
     let client = setup().expect("Failed to initialize client");
 
-    test_endpoint_dataframe(
+    check_endpoint(
         &client,
         "balance_sheet",
-        json!({
-            "symbol": "AAPL"
-        }),
+        json!({ "symbol": "AAPL" }),
         20, // At least 20 balance sheet records (annual + quarterly)
         9,  // period_type, fiscal_date_ending, assets, liabilities, equity, etc.
     )
@@ -263,12 +230,10 @@ async fn test_balance_sheet_dataframe() {
 async fn test_cash_flow_dataframe() {
     let client = setup().expect("Failed to initialize client");
 
-    test_endpoint_dataframe(
+    check_endpoint(
         &client,
         "cash_flow",
-        json!({
-            "symbol": "AAPL"
-        }),
+        json!({ "symbol": "AAPL" }),
         20, // At least 20 cash flow records (annual + quarterly)
         12, // period_type, fiscal_date_ending, operating/investing/financing flows, etc.
     )
@@ -305,10 +270,10 @@ async fn test_all_endpoints_return_valid_dataframes() {
     ];
 
     for (tool_name, params, min_rows, min_columns) in test_cases {
-        test_endpoint_dataframe(&client, tool_name, params, min_rows, min_columns)
+        check_endpoint(&client, tool_name, params, min_rows, min_columns)
             .await
-            .expect(&format!("{} should return valid DataFrame", tool_name));
+            .unwrap_or_else(|e| panic!("{tool_name} should return valid DataFrame: {e}"));
     }
 
-    println!("🎉 All {} endpoints returned valid DataFrames!", 10);
+    println!("🎉 All 10 endpoints returned valid DataFrames!");
 }

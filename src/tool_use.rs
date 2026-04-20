@@ -301,16 +301,32 @@ pub fn list_tools() -> Vec<ToolInfo> {
     ]
 }
 
+/// Look up a required nested object in an Alpha Vantage response. When the
+/// expected key is missing, surface whatever upstream message the API returned
+/// (`Information`, `Note`, or `Error Message`) instead of the generic "no data"
+/// error — those fields carry rate-limit notices, premium-tier prompts, and
+/// invalid-symbol messages that are essential for debugging.
+fn expect_object<'a>(response: &'a Value, key: &str) -> Result<&'a serde_json::Map<String, Value>> {
+    if let Some(obj) = response.get(key).and_then(|v| v.as_object()) {
+        return Ok(obj);
+    }
+    let upstream = response
+        .get("Information")
+        .or_else(|| response.get("Note"))
+        .or_else(|| response.get("Error Message"))
+        .and_then(|v| v.as_str());
+    Err(match upstream {
+        Some(msg) => Error::Custom(format!("Alpha Vantage API: {msg}")),
+        None => Error::Custom(format!("No '{key}' data found in response")),
+    })
+}
+
 /// Transform time_series_intraday response (1min, 5min, 15min, 30min, 60min intervals)
-fn transform_intraday_response(response: Value, interval: &str) -> Result<(Value, Option<Value>, Schema)> {
+fn intraday_table(response: Value, interval: &str) -> Result<(Value, Option<Value>, Schema)> {
     let metadata = response.get("Meta Data").cloned();
 
-    // The exact key for intraday data
     let time_series_key = format!("Time Series ({})", interval);
-    let time_series_obj = response
-        .get(&time_series_key)
-        .and_then(|v| v.as_object())
-        .ok_or_else(|| Error::Custom(format!("No '{}' data found in response", time_series_key)))?;
+    let time_series_obj = expect_object(&response, &time_series_key)?;
 
     let mut data_array: Vec<Value> = Vec::new();
     for (timestamp, values) in time_series_obj {
@@ -384,13 +400,10 @@ fn transform_intraday_response(response: Value, interval: &str) -> Result<(Value
 }
 
 /// Transform time_series_daily response
-fn transform_daily_response(response: Value) -> Result<(Value, Option<Value>, Schema)> {
+fn daily_table(response: Value) -> Result<(Value, Option<Value>, Schema)> {
     let metadata = response.get("Meta Data").cloned();
 
-    let time_series_obj = response
-        .get("Time Series (Daily)")
-        .and_then(|v| v.as_object())
-        .ok_or_else(|| Error::Custom("No 'Time Series (Daily)' data found in response".to_string()))?;
+    let time_series_obj = expect_object(&response, "Time Series (Daily)")?;
 
     let mut data_array: Vec<Value> = Vec::new();
     for (date, values) in time_series_obj {
@@ -464,13 +477,10 @@ fn transform_daily_response(response: Value) -> Result<(Value, Option<Value>, Sc
 }
 
 /// Transform time_series_weekly response
-fn transform_weekly_response(response: Value) -> Result<(Value, Option<Value>, Schema)> {
+fn weekly_table(response: Value) -> Result<(Value, Option<Value>, Schema)> {
     let metadata = response.get("Meta Data").cloned();
 
-    let time_series_obj = response
-        .get("Weekly Time Series")
-        .and_then(|v| v.as_object())
-        .ok_or_else(|| Error::Custom("No 'Weekly Time Series' data found in response".to_string()))?;
+    let time_series_obj = expect_object(&response, "Weekly Time Series")?;
 
     let mut data_array: Vec<Value> = Vec::new();
     for (date, values) in time_series_obj {
@@ -544,13 +554,10 @@ fn transform_weekly_response(response: Value) -> Result<(Value, Option<Value>, S
 }
 
 /// Transform time_series_monthly response
-fn transform_monthly_response(response: Value) -> Result<(Value, Option<Value>, Schema)> {
+fn monthly_table(response: Value) -> Result<(Value, Option<Value>, Schema)> {
     let metadata = response.get("Meta Data").cloned();
 
-    let time_series_obj = response
-        .get("Monthly Time Series")
-        .and_then(|v| v.as_object())
-        .ok_or_else(|| Error::Custom("No 'Monthly Time Series' data found in response".to_string()))?;
+    let time_series_obj = expect_object(&response, "Monthly Time Series")?;
 
     let mut data_array: Vec<Value> = Vec::new();
     for (date, values) in time_series_obj {
@@ -624,7 +631,7 @@ fn transform_monthly_response(response: Value) -> Result<(Value, Option<Value>, 
 }
 
 /// Transform company_overview response
-fn transform_company_overview_response(response: Value) -> Result<(Value, Option<Value>, Schema)> {
+fn overview_table(response: Value) -> Result<(Value, Option<Value>, Schema)> {
     // Company overview is a single object, so we convert it to a single-row array
     let data_array = vec![response.clone()];
 
@@ -750,7 +757,7 @@ fn transform_company_overview_response(response: Value) -> Result<(Value, Option
 }
 
 /// Transform earnings response
-fn transform_earnings_response(response: Value) -> Result<(Value, Option<Value>, Schema)> {
+fn earnings_table(response: Value) -> Result<(Value, Option<Value>, Schema)> {
     let symbol = response.get("symbol").cloned();
     let metadata = symbol.map(|s| json!({"symbol": s}));
 
@@ -855,7 +862,7 @@ fn transform_earnings_response(response: Value) -> Result<(Value, Option<Value>,
 }
 
 /// Transform earnings_estimates response
-fn transform_earnings_estimates_response(response: Value) -> Result<(Value, Option<Value>, Schema)> {
+fn estimates_table(response: Value) -> Result<(Value, Option<Value>, Schema)> {
     let symbol = response.get("symbol").cloned();
     let metadata = symbol.map(|s| json!({"symbol": s}));
 
@@ -976,7 +983,7 @@ fn transform_earnings_estimates_response(response: Value) -> Result<(Value, Opti
 }
 
 /// Transform income_statement response
-fn transform_income_statement_response(response: Value) -> Result<(Value, Option<Value>, Schema)> {
+fn income_statement_table(response: Value) -> Result<(Value, Option<Value>, Schema)> {
     let symbol = response.get("symbol").cloned();
     let metadata = symbol.map(|s| json!({"symbol": s}));
 
@@ -1143,7 +1150,7 @@ fn transform_income_statement_response(response: Value) -> Result<(Value, Option
 }
 
 /// Transform balance_sheet response
-fn transform_balance_sheet_response(response: Value) -> Result<(Value, Option<Value>, Schema)> {
+fn balance_sheet_table(response: Value) -> Result<(Value, Option<Value>, Schema)> {
     let symbol = response.get("symbol").cloned();
     let metadata = symbol.map(|s| json!({"symbol": s}));
 
@@ -1309,7 +1316,7 @@ fn transform_balance_sheet_response(response: Value) -> Result<(Value, Option<Va
 }
 
 /// Transform cash_flow response
-fn transform_cash_flow_response(response: Value) -> Result<(Value, Option<Value>, Schema)> {
+fn cash_flow_table(response: Value) -> Result<(Value, Option<Value>, Schema)> {
     let symbol = response.get("symbol").cloned();
     let metadata = symbol.map(|s| json!({"symbol": s}));
 
@@ -1594,7 +1601,7 @@ pub async fn call_tool<Client: Request>(client: &AlphaVantage<Client>, request: 
             let response = query.get().await?;
             let response_json: Value =
                 serde_json::from_str(&response).map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))?;
-            let (data, metadata, schema) = transform_intraday_response(response_json, interval)?;
+            let (data, metadata, schema) = intraday_table(response_json, interval)?;
             let label = ai_label.unwrap_or(symbol);
             Ok(ToolResult::columnar(data, schema, metadata)
                 .with_label(Label::new(label))
@@ -1620,7 +1627,7 @@ pub async fn call_tool<Client: Request>(client: &AlphaVantage<Client>, request: 
             let response = query.get().await?;
             let response_json: Value =
                 serde_json::from_str(&response).map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))?;
-            let (data, metadata, schema) = transform_daily_response(response_json)?;
+            let (data, metadata, schema) = daily_table(response_json)?;
             let label = ai_label.unwrap_or(symbol);
             Ok(ToolResult::columnar(data, schema, metadata)
                 .with_label(Label::new(label))
@@ -1636,7 +1643,7 @@ pub async fn call_tool<Client: Request>(client: &AlphaVantage<Client>, request: 
             let response = query.get().await?;
             let response_json: Value =
                 serde_json::from_str(&response).map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))?;
-            let (data, metadata, schema) = transform_weekly_response(response_json)?;
+            let (data, metadata, schema) = weekly_table(response_json)?;
             let label = ai_label.unwrap_or(symbol);
             Ok(ToolResult::columnar(data, schema, metadata)
                 .with_label(Label::new(label))
@@ -1652,7 +1659,7 @@ pub async fn call_tool<Client: Request>(client: &AlphaVantage<Client>, request: 
             let response = query.get().await?;
             let response_json: Value =
                 serde_json::from_str(&response).map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))?;
-            let (data, metadata, schema) = transform_monthly_response(response_json)?;
+            let (data, metadata, schema) = monthly_table(response_json)?;
             let label = ai_label.unwrap_or(symbol);
             Ok(ToolResult::columnar(data, schema, metadata)
                 .with_label(Label::new(label))
@@ -1670,7 +1677,7 @@ pub async fn call_tool<Client: Request>(client: &AlphaVantage<Client>, request: 
             let response = query.get().await?;
             let response_json: Value =
                 serde_json::from_str(&response).map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))?;
-            let (data, metadata, schema) = transform_company_overview_response(response_json)?;
+            let (data, metadata, schema) = overview_table(response_json)?;
             let label = ai_label.unwrap_or(symbol);
             Ok(ToolResult::columnar(data, schema, metadata)
                 .with_label(Label::new(label))
@@ -1686,7 +1693,7 @@ pub async fn call_tool<Client: Request>(client: &AlphaVantage<Client>, request: 
             let response = query.get().await?;
             let response_json: Value =
                 serde_json::from_str(&response).map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))?;
-            let (data, metadata, schema) = transform_earnings_response(response_json)?;
+            let (data, metadata, schema) = earnings_table(response_json)?;
             let label = ai_label.unwrap_or(symbol);
             Ok(ToolResult::columnar(data, schema, metadata)
                 .with_label(Label::new(label))
@@ -1707,7 +1714,7 @@ pub async fn call_tool<Client: Request>(client: &AlphaVantage<Client>, request: 
             let response = query.get().await?;
             let response_json: Value =
                 serde_json::from_str(&response).map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))?;
-            let (data, metadata, schema) = transform_earnings_estimates_response(response_json)?;
+            let (data, metadata, schema) = estimates_table(response_json)?;
             let label = ai_label.unwrap_or(symbol);
             Ok(ToolResult::columnar(data, schema, metadata)
                 .with_label(Label::new(label))
@@ -1723,7 +1730,7 @@ pub async fn call_tool<Client: Request>(client: &AlphaVantage<Client>, request: 
             let response = query.get().await?;
             let response_json: Value =
                 serde_json::from_str(&response).map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))?;
-            let (data, metadata, schema) = transform_income_statement_response(response_json)?;
+            let (data, metadata, schema) = income_statement_table(response_json)?;
             let label = ai_label.unwrap_or(symbol);
             Ok(ToolResult::columnar(data, schema, metadata)
                 .with_label(Label::new(label))
@@ -1739,7 +1746,7 @@ pub async fn call_tool<Client: Request>(client: &AlphaVantage<Client>, request: 
             let response = query.get().await?;
             let response_json: Value =
                 serde_json::from_str(&response).map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))?;
-            let (data, metadata, schema) = transform_balance_sheet_response(response_json)?;
+            let (data, metadata, schema) = balance_sheet_table(response_json)?;
             let label = ai_label.unwrap_or(symbol);
             Ok(ToolResult::columnar(data, schema, metadata)
                 .with_label(Label::new(label))
@@ -1755,7 +1762,7 @@ pub async fn call_tool<Client: Request>(client: &AlphaVantage<Client>, request: 
             let response = query.get().await?;
             let response_json: Value =
                 serde_json::from_str(&response).map_err(|e| Error::Custom(format!("Failed to parse response: {e}")))?;
-            let (data, metadata, schema) = transform_cash_flow_response(response_json)?;
+            let (data, metadata, schema) = cash_flow_table(response_json)?;
             let label = ai_label.unwrap_or(symbol);
             Ok(ToolResult::columnar(data, schema, metadata)
                 .with_label(Label::new(label))
@@ -1763,5 +1770,44 @@ pub async fn call_tool<Client: Request>(client: &AlphaVantage<Client>, request: 
         }
 
         _ => Err(Error::Custom(format!("Unknown tool: {tool}"))),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn expect_object_surfaces_rate_limit_information() {
+        let body = json!({
+            "Information": "Thank you for using Alpha Vantage! Our standard API rate limit is 25 requests per day."
+        });
+        let err = expect_object(&body, "Time Series (Daily)").unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("Alpha Vantage API:"), "got: {msg}");
+        assert!(msg.contains("25 requests per day"), "got: {msg}");
+    }
+
+    #[test]
+    fn expect_object_surfaces_invalid_symbol_error_message() {
+        let body = json!({
+            "Error Message": "Invalid API call. Please retry or visit the documentation."
+        });
+        let err = expect_object(&body, "Monthly Time Series").unwrap_err();
+        assert!(err.to_string().contains("Invalid API call"), "got: {err}");
+    }
+
+    #[test]
+    fn expect_object_falls_back_to_missing_key_when_no_upstream_message() {
+        let body = json!({ "Meta Data": {} });
+        let err = expect_object(&body, "Weekly Time Series").unwrap_err();
+        assert!(err.to_string().contains("Weekly Time Series"), "got: {err}");
+    }
+
+    #[test]
+    fn expect_object_returns_object_when_present() {
+        let body = json!({ "Monthly Time Series": { "2025-01": { "4. close": "100.0" } } });
+        let obj = expect_object(&body, "Monthly Time Series").unwrap();
+        assert!(obj.contains_key("2025-01"));
     }
 }

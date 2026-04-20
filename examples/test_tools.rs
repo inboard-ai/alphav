@@ -1,7 +1,6 @@
 //! Test the tool_use module
 use alphav::AlphaVantage;
-use alphav::tool_use::{ToolCallResult, call_tool, list_tools};
-use emporium_core::ToolResult;
+use alphav::tool_use::{ToolResult, call_tool, list_tools};
 use serde_json::json;
 
 #[tokio::main]
@@ -27,32 +26,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         });
 
         match call_tool(&client, request).await {
-            Ok(ToolCallResult::DataFrame { data, schema, metadata }) => {
-                eprintln!("Data: {}", data);
+            Ok(ToolResult::DataFrame(df)) => {
+                eprintln!("Data: {}", df.data);
                 eprintln!(
                     "Schema: {}",
-                    schema
+                    df.schema
                         .iter()
                         .map(|c| format!("{} as {} ({})", c.name, c.alias, c.dtype))
                         .collect::<Vec<_>>()
                         .join(", ")
                 );
-                let emp = emporium_core::ToolResult::columnar(data, schema, metadata.clone());
-                match emp {
-                    ToolResult::DataFrame(proto) => match proto.to_dataframe() {
-                        Ok(df) => println!("Dataframe:\n{}", df.to_string()),
-                        Err(e) => println!("Error converting to dataframe: {e}"),
-                    },
-                    ToolResult::Text(text) => println!("Text: {}", text),
+                if let Some(ref meta) = df.metadata {
+                    println!("Metadata: {}", serde_json::to_string_pretty(meta)?);
                 }
-                // println!("Success! Response: {}", serde_json::to_string_pretty(&data)?);
-                // println!("Schema columns: {}", schema.len());
-                if let Some(meta) = metadata {
-                    println!("Metadata: {}", serde_json::to_string_pretty(&meta)?);
+                match df.to_dataframe() {
+                    Ok(polars_df) => println!("Dataframe:\n{}", polars_df),
+                    Err(e) => println!("Error converting to dataframe: {e}"),
                 }
             }
-            Ok(ToolCallResult::Text(text)) => {
-                println!("Success! Response: {}", text);
+            Ok(ToolResult::Text(text)) => {
+                println!("Success! Response: {}", text.content);
             }
             Err(e) => println!("Error calling tool: {}", e),
         }
